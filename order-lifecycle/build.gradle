@@ -1,0 +1,14 @@
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
+
+    dependencies {
+        runtimeOnly 'org.postgresql:postgresql'
+        runtimeOnly 'org.postgresql:r2dbc-postgresql'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+}
+
