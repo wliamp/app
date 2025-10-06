@@ -1,4 +1,4 @@
-name: CI Dev
+name: CI Develop
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
             reg:
               - 'reg/**'
 
-  ci:
+  develop:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.modules != '' }}
     strategy:
@@ -46,7 +46,7 @@ jobs:
         module: ${{ fromJSON(needs.detect-changes.outputs.modules) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/actions/ci-develop
-        with:
-          module: ${{ matrix.module }}
+    - uses: ./.github/actions/ci-develop
+      with:
+        module: ${{ matrix.module }}
 

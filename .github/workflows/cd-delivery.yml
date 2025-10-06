@@ -8,66 +8,40 @@ on:
 
 jobs:
   define-matrix:
+    if: >
+      !contains(vars.EXCLUDE_DELIVERY_ACTORS, github.actor)
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - id: set
         run: |
-          modules='["pay","merc","gtw","pro","net","iss","aqr","cs","fr","reg"]'
-          images='["payer","merchant","gateway","processor","network","issuer","acquirer","settle","fraud","regulator"]'
+          module_map='${{ vars.MODULE_IMAGE }}'
           versions='[]'
           tag="$(date +'%Y%m%d')-${GITHUB_SHA::7}"
-          for i in {0..9}; do
-            module=$(jq -r ".[$i]" <<< "$modules")
-            image=$(jq -r ".[$i]" <<< "$images")
-            versions=$(jq -c --arg m "$module" --arg i "$image" --arg v "$tag" '. + [{"module":$m,"image":$i,"version":$v}]' <<< "${versions:-[]}")
+          count=$(jq 'length' <<< "$module_map")
+          for ((i=0; i<$count; i++)); do
+            module=$(jq -r ".[$i].module" <<< "$module_map")
+            image=$(jq -r ".[$i].image" <<< "$module_map")
+            versions=$(jq -c --arg m "$module" --arg i "$image" --arg v "$tag" \
+              '. + [{"module":$m,"image":$i,"version":$v}]' <<< "${versions:-[]}")
           done
           echo "matrix=$versions" >> $GITHUB_OUTPUT
 
-  validate-branch:
-    needs: define-matrix
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref_name, 'release/') || startsWith(github.ref_name, 'hotfix/')
-    steps:
-      - name: ✅ Branch validation
-        run: echo "Branch $GITHUB_REF_NAME approved for delivery."
-
   delivery:
-    needs: validate-branch
+    needs: define-matrix
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.define-matrix.outputs.matrix) }}
     name: Build & Push → ${{ matrix.module }}
     steps:
-      - name: CD Delivery
-        uses: ./.github/actions/cd-delivery
+      - uses: ./.github/actions/cd-delivery
         with:
           module: ${{ matrix.module }}
           image: ${{ matrix.image }}
           version: ${{ matrix.version }}
           docker_user: ${{ secrets.DOCKERHUB_USER }}
-          docker_pass: ${{ secrets.DOCKERHUB_TOKEN }}
-          docker_repo: wliamp
-
-  notify:
-    needs: delivery
-    runs-on: ubuntu-latest
-    steps:
-      - name: 📣 Notify Slack/Discord
-        env:
-          WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-        run: |
-          MESSAGE="✅ CD Delivery completed for branch: $GITHUB_REF_NAME"
-          curl -X POST -H "Content-Type: application/json" \
-            --data "{\"text\":\"$MESSAGE\"}" $WEBHOOK_URL
-
-  delete-release-branch:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: 🧹 Delete release branch
-        run: |
-          echo "Deleting branch: ${{ github.head_ref }}"
-          git push origin --delete ${{ github.head_ref }}
+          docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
+          docker_repo: ${{ vars.DOCKERHUB_REPO }}
+          slack: ${{ secrets.SLACK_WEBHOOK_URL }}
+          pat: ${{ secrets.PAT }}

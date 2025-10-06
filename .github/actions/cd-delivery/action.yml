@@ -14,12 +14,18 @@ inputs:
   docker_user:
     required: true
     description: "Docker registry username or service account used for authentication"
-  docker_pass:
+  docker_token:
     required: true
     description: "Docker registry password or token used for login"
   docker_repo:
     required: true
     description: "Target Docker repository or registry namespace"
+  slack:
+    required: true
+    description: "Slack Webhook notification receive"
+  pat:
+    required: true
+    description: "Github Personal Access Token"
 
 runs:
   using: composite
@@ -27,7 +33,17 @@ runs:
     - name: 🧩 Checkout
       uses: actions/checkout@v4
 
-    - name: 🏗️ Build Docker Image
+    - name: Validate
+      shell: bash
+      run: |
+        BRANCH="${GITHUB_REF#refs/heads/}"
+        if [[ ! "$BRANCH" =~ ^(release/.*)$ ]]; then
+          echo "❌ Branch '$BRANCH' is NOT ALLOWED for CD (Delivery)."
+          exit 1
+        fi
+        echo "✅ Branch validation passed for $BRANCH"
+
+    - name: 🏗️ Build
       shell: bash
       run: |
         IMAGE="${{ inputs.docker_repo }}/${{ inputs.image }}:${{ inputs.version }}"
@@ -35,16 +51,13 @@ runs:
         docker build -t "$IMAGE" -f "${{ inputs.module }}/Dockerfile" "${{ inputs.module }}"
         echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
-    - name: 🔐 Login to DockerHub
+    - name: 🚀 Push
       shell: bash
       run: |
-        echo "${{ inputs.docker_pass }}" | docker login -u "${{ inputs.docker_user }}" --password-stdin
+        echo "${{ inputs.docker_token }}" | docker login -u "${{ inputs.docker_user }}" --password-stdin
+        docker push "$IMAGE"
 
-    - name: 🚀 Push Docker Image
-      shell: bash
-      run: docker push "$IMAGE"
-
-    - name: 🧠 Security Scan (Final Gate)
+    - name: 🧠 Scan
       uses: aquasecurity/trivy-action@0.20.0
       with:
         image-ref: ${{ env.IMAGE }}
@@ -52,7 +65,7 @@ runs:
         ignore-unfixed: true
         exit-code: 1
 
-    - name: 🧾 Generate Digest Report
+    - name: 🧾 Report
       shell: bash
       run: |
         DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")
@@ -60,8 +73,38 @@ runs:
         echo "✅ Build completed for $IMAGE" > report.txt
         echo "🔑 Digest: $DIGEST" >> report.txt
 
-    - name: 📤 Upload Report
+    - name: 📤 Artifact
       uses: actions/upload-artifact@v4
       with:
         name: release-report-${{ inputs.module }}-${{ inputs.version }}
         path: report.txt
+
+    - name: 📣 Notify
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.slack }}
+      run: |
+        MESSAGE="✅ CD Delivery completed for branch: $GITHUB_REF_NAME"
+        curl -X POST -H "Content-Type: application/json" \
+          --data "{\"text\":\"$MESSAGE\"}" $WEBHOOK_URL
+
+    - name: 🧹 Delete
+      shell: bash
+      env:
+        PAT: ${{ inputs.pat }}
+        REPO_OWNER: ${{ github.repository_owner }}
+        REPO_NAME: ${{ github.repository }}
+        BRANCH: ${{ github.head_ref }}
+      run: |
+        set -euo pipefail
+        if [[ -z "$BRANCH" ]]; then
+          echo "No branch to delete. Exiting."
+          exit 0
+        fi
+        echo "Deleting protected branch: $BRANCH from repo $REPO_NAME"
+        curl -s -X DELETE \
+          -H "Authorization: token $PAT" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/git/refs/heads/$BRANCH"
+
+        echo "✅ Branch $BRANCH deletion request sent"

@@ -1,33 +1,37 @@
-name: "CD: Staging → Production"
+name: CD Deploy
 
 on:
   workflow_dispatch:
     inputs:
-      module:
-        description: "Microservice name"
+      repo:
+        description: "Docker Image repo name"
         required: true
-      version:
+      ver:
         description: "Docker image version"
         required: true
-  schedule:
-    - cron: "0 2 * * *"
 
 jobs:
-  cd:
-    name: Continuous Delivery
+  delpoy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Deploy via Composite Action
-        uses: ./.github/actions/cd-deploy
-        with:
-          module: ${{ github.event.inputs.module }}
-          image: docker.io/wliamp/${{ github.event.inputs.module }}
-          version: ${{ github.event.inputs.version }}
-          staging_cluster: staging-cluster
-          prod_cluster: prod-cluster
-          approvers: wliamp
-          manifests: k8s/${{ github.event.inputs.module }}
+    - uses: ./.github/actions/cd-deploy
+      with:
+        image_repo: ${{ github.event.inputs.repo }}
+        image_ver: ${{ github.event.inputs.ver }}
+        manifests: ${{ vars.K8S_MANIFESTS_BASE }}/${{ github.event.inputs.repo }}
+
+        image_space: ${{ vars.DOCKERHUB_REPO }}
+        approvers: ${{ vars.APPROVERS }}
+        staging_cluster: ${{ vars.K8S_STAGING_CLUSTER }}
+        prod_cluster: ${{ vars.K8S_PROD_CLUSTER }}
+        staging_namespace: ${{ vars.K8S_STAGING_NAMESPACE }}
+        prod_namespace: ${{ vars.K8S_PROD_NAMESPACE }}
+        prom: ${{ vars.PROM_PUSH_URL }}
+        slack: ${{ vars.SLACK_WEBHOOK_URL }}
+        grafana: ${{ vars.GRAFANA_URL }}
+
+        k8s_config: ${{ secrets.K8S_CONFIG_BASE64 }}
+        grafana_key: ${{ secrets.GRAFANA_API_KEY }}
+

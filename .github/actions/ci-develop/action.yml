@@ -19,12 +19,12 @@ runs:
     # ------------------------
     # Branch Validation
     # ------------------------
-    - name: Validate branch name
+    - name: Validate
       shell: bash
       run: |
         BRANCH="${GITHUB_REF#refs/heads/}"
-        if [[ ! "$BRANCH" =~ ^(main|release/.*|feature/.*|bugfix/.*|hotfix/.*)$ ]]; then
-          echo "❌ Branch '$BRANCH' is not allowed for CI."
+        if [[ ! "$BRANCH" =~ ^(main|release/.*|feature/.*|bugfix/.*)$ ]]; then
+          echo "❌ Branch '$BRANCH' is NOT ALLOWED for CI (DEVELOP)."
           exit 1
         fi
         echo "✅ Branch validation passed for $BRANCH"
@@ -51,7 +51,7 @@ runs:
     # ------------------------
     # Static & Security Analysis
     # ------------------------
-    - name: Static Checks (Checkstyle/Spotbugs)
+    - name: Check
       shell: bash
       run: ./gradlew :${{ inputs.module }}:check
 
@@ -65,7 +65,7 @@ runs:
     # ------------------------
     # Testing & Building
     # ------------------------
-    - name: Tests + Build + Coverage
+    - name: Test + Build + Coverage
       shell: bash
       env:
         SPRING_PROFILES_ACTIVE: test
@@ -87,7 +87,7 @@ runs:
     # ------------------------
     # Aggregate Validation (e.g. no-changes, consistency)
     # ------------------------
-    - name: Verify aggregate consistency
+    - name: Aggregate
       shell: bash
       run: |
         if git diff --quiet HEAD^ HEAD -- ':!**/README.md'; then
@@ -99,7 +99,7 @@ runs:
     # ------------------------
     # Image Pre-Build & Scan
     # ------------------------
-    - name: Pre-Build Docker Image
+    - name: Pre-Build
       shell: bash
       run: |
         docker build \
@@ -108,7 +108,7 @@ runs:
           -f ${{ inputs.module }}/Dockerfile \
           ${{ inputs.module }}
 
-    - name: Scan Docker Image
+    - name: Scan
       uses: aquasecurity/trivy-action@0.20.0
       with:
         image-ref: ci-${{ inputs.module }}:prebuild
