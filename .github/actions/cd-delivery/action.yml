@@ -1,0 +1,67 @@
+name: "CD Delivery Step"
+description: "Build, push, and scan Docker image as part of the delivery pipeline."
+
+inputs:
+  module:
+    required: true
+    description: "Path to the module or service directory containing the Dockerfile"
+  image:
+    required: true
+    description: "Docker image name to be built (without registry prefix)"
+  version:
+    required: true
+    description: "Image version tag (e.g., 'v1.0.0' or commit SHA)"
+  docker_user:
+    required: true
+    description: "Docker registry username or service account used for authentication"
+  docker_pass:
+    required: true
+    description: "Docker registry password or token used for login"
+  docker_repo:
+    required: true
+    description: "Target Docker repository or registry namespace"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧩 Checkout
+      uses: actions/checkout@v4
+
+    - name: 🏗️ Build Docker Image
+      shell: bash
+      run: |
+        IMAGE="${{ inputs.docker_repo }}/${{ inputs.image }}:${{ inputs.version }}"
+        echo "Building image: $IMAGE"
+        docker build -t "$IMAGE" -f "${{ inputs.module }}/Dockerfile" "${{ inputs.module }}"
+        echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+    - name: 🔐 Login to DockerHub
+      shell: bash
+      run: |
+        echo "${{ inputs.docker_pass }}" | docker login -u "${{ inputs.docker_user }}" --password-stdin
+
+    - name: 🚀 Push Docker Image
+      shell: bash
+      run: docker push "$IMAGE"
+
+    - name: 🧠 Security Scan (Final Gate)
+      uses: aquasecurity/trivy-action@0.20.0
+      with:
+        image-ref: ${{ env.IMAGE }}
+        severity: HIGH,CRITICAL
+        ignore-unfixed: true
+        exit-code: 1
+
+    - name: 🧾 Generate Digest Report
+      shell: bash
+      run: |
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")
+        echo "DIGEST=$DIGEST" >> $GITHUB_ENV
+        echo "✅ Build completed for $IMAGE" > report.txt
+        echo "🔑 Digest: $DIGEST" >> report.txt
+
+    - name: 📤 Upload Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-report-${{ inputs.module }}-${{ inputs.version }}
+        path: report.txt

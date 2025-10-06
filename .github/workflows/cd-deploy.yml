@@ -1,0 +1,33 @@
+name: "CD: Staging → Production"
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: "Microservice name"
+        required: true
+      version:
+        description: "Docker image version"
+        required: true
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  cd:
+    name: Continuous Delivery
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via Composite Action
+        uses: ./.github/actions/cd-deploy
+        with:
+          module: ${{ github.event.inputs.module }}
+          image: docker.io/wliamp/${{ github.event.inputs.module }}
+          version: ${{ github.event.inputs.version }}
+          staging_cluster: staging-cluster
+          prod_cluster: prod-cluster
+          approvers: wliamp
+          manifests: k8s/${{ github.event.inputs.module }}

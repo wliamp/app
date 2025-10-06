@@ -1,0 +1,52 @@
+name: CI Dev
+
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            pay:
+              - 'pay/**'
+            merc:
+              - 'merc/**'
+            gtw:
+              - 'gtw/**'
+            pro:
+              - 'pro/**'
+            net:
+              - 'net/**'
+            iss:
+              - 'iss/**'
+            aqr:
+              - 'aqr/**'
+            cs:
+              - 'cs/**'
+            fr:
+              - 'fr/**'
+            reg:
+              - 'reg/**'
+
+  ci:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.modules != '' }}
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.detect-changes.outputs.modules) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/ci-develop
+        with:
+          module: ${{ matrix.module }}
+

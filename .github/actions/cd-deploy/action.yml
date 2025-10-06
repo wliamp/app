@@ -1,0 +1,156 @@
+name: "CD Deploy"
+description: |
+  Continuous Delivery pipeline:
+  - Deploy to Staging
+  - Health & Smoke Tests
+  - Manual Approval Gate
+  - Production Rollout (Rolling/Blue-Green)
+  - Observability & Reporting
+
+inputs:
+  module:
+    description: "Module / Microservice name"
+    required: true
+  image:
+    description: "Docker image name (full repo path)"
+    required: true
+  version:
+    description: "Docker image version"
+    required: true
+  staging_cluster:
+    description: "Kubernetes context for staging cluster"
+    required: true
+  prod_cluster:
+    description: "Kubernetes context for production cluster"
+    required: true
+  approvers:
+    description: "Comma-separated list of GitHub usernames allowed to approve"
+    required: true
+  manifests:
+    description: "Path to Kubernetes manifests or Helm chart folder"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # ------------------------
+    # Staging Deployment
+    # ------------------------
+    - name: 🧩 Deploy to Staging
+      shell: bash
+      run: |
+        echo "🚀 Deploying '${{ inputs.module }}' to staging cluster: ${{ inputs.staging_cluster }}"
+        kubectl config use-context ${{ inputs.staging_cluster }}
+        kubectl apply -f ${{ inputs.manifests }}
+        kubectl rollout status deploy/${{ inputs.module }} -n staging --timeout=120s
+
+    - name: 🧪 Run Health & Smoke Tests
+      shell: bash
+      run: |
+        echo "Running health check for ${{ inputs.module }}..."
+        kubectl run smoke-${{ inputs.module }} \
+          --rm -i --image=curlimages/curl -n staging \
+          -- curl -sf http://${{ inputs.module }}:8080/health || exit 1
+        echo "✅ Staging health OK"
+
+    # ------------------------
+    # Manual Gate
+    # ------------------------
+    - name: ⏸️ Wait for Manual Approval
+      uses: trstringer/manual-approval@v1
+      with:
+        secret: ${{ github.token }}
+        approvers: ${{ inputs.approvers }}
+        minimum-approvals: 1
+        issue-title: "Approve Production Rollout for ${{ inputs.module }}"
+        issue-body: |
+          ✅ Staging passed for ${{ inputs.module }}
+          🔖 Image: ${{ inputs.image }}:${{ inputs.version }}
+          Please approve deployment to Production.
+
+    # ------------------------
+    # Production Deployment
+    # ------------------------
+    - name: 🧩 Deploy to Production
+      shell: bash
+      run: |
+        echo "🚀 Rolling out '${{ inputs.module }}' to production cluster: ${{ inputs.prod_cluster }}"
+        kubectl config use-context ${{ inputs.prod_cluster }}
+        kubectl apply -f ${{ inputs.manifests }}
+        kubectl rollout status deploy/${{ inputs.module }} -n production --timeout=120s
+        echo "✅ Production rollout completed"
+
+    # ------------------------
+    # Observability Integration
+    # ------------------------
+    - name: 📊 Observability Integration (Prometheus + Grafana + Slack)
+      shell: bash
+      env:
+        PROM_PUSH_URL: ${{ secrets.PROM_PUSH_URL }}
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+        GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+      run: |
+        echo "📥 Collecting deployment logs for module: ${{ inputs.module }} ..."
+        kubectl logs -l app=${{ inputs.module }} -n production --tail=300 > deploy_logs.txt || true
+        echo "🔍 Checking for anomalies or errors..."
+        if grep -qE "ERROR|Exception|Fail" deploy_logs.txt; then
+          echo "⚠️ Errors detected in deployment logs."
+          DEPLOY_STATUS=0
+          ALERT_COLOR="#ff0000"
+          ALERT_MSG="🚨 *Deployment FAILED!* Module *${{ inputs.module }}* (version *${{ inputs.version }}*) encountered errors."
+        else
+          echo "✅ Logs look clean. Deployment successful."
+          DEPLOY_STATUS=1
+          ALERT_COLOR="#36a64f"
+          ALERT_MSG="✅ *Deployment successful!* Module *${{ inputs.module }}* (version *${{ inputs.version }}*) is healthy."
+        fi
+
+        echo "📈 Pushing deployment metrics to Prometheus Pushgateway..."
+        cat <<EOF | curl --silent --show-error --data-binary @- ${PROM_PUSH_URL}/metrics/job/deployment/module/${{ inputs.module }}
+        deployment_status ${DEPLOY_STATUS}
+        deployment_timestamp $(date +%s)
+        deployment_version_info{module="${{ inputs.module }}",version="${{ inputs.version }}"} 1
+        EOF
+
+        echo "🧠 Creating Grafana annotation for deployment..."
+        curl -s -X POST "${GRAFANA_URL}/api/annotations" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+          -d "$(jq -n \
+                --arg text "Deployment of ${{ inputs.module }}:${{ inputs.version }}" \
+                --arg tags "deployment,${{ inputs.module }}" \
+                '{text: $text, tags: ($tags | split(","))}')" \
+          || echo "⚠️ Failed to push Grafana annotation."
+
+        echo "💬 Sending Slack notification..."
+        curl -X POST "${SLACK_WEBHOOK_URL}" \
+          -H "Content-Type: application/json" \
+          -d "$(jq -n \
+                --arg text "${ALERT_MSG}" \
+                --arg color "${ALERT_COLOR}" \
+                '{attachments: [{color: $color, text: $text}]}')" \
+          || echo "⚠️ Failed to send Slack alert."
+
+        echo "✅ Observability integration completed."
+
+    # ------------------------
+    # Reporting
+    # ------------------------
+    - name: 📋 Post-Deployment Summary
+      shell: bash
+      run: |
+        echo "Generating deployment summary..."
+        echo "Module: ${{ inputs.module }}" > report.txt
+        echo "Image: ${{ inputs.image }}:${{ inputs.version }}" >> report.txt
+        echo "Staging: Passed" >> report.txt
+        echo "Production: Completed" >> report.txt
+        echo "Timestamp: $(date -u)" >> report.txt
+        cat report.txt
+        echo "✅ Deployment summary generated"
+
+    - name: Upload Report Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cd-report-${{ inputs.module }}
+        path: report.txt

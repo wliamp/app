@@ -1,0 +1,129 @@
+name: "CI Release"
+description: |
+  - Auto-branching from dev branch
+  - Semantic versioning
+  - Docker reproducible build
+  - Security scan
+  - Manual approval
+  - Reporting
+
+inputs:
+  module:
+    description: "Module / Microservice in monorepo"
+    required: true
+  version:
+    description: "Target semantic version"
+    required: true
+  image:
+    description: "Docker Image name"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # ------------------------
+    # Branch & Version Validation
+    # ------------------------
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Validate semantic version
+      shell: bash
+      run: |
+        if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: ${{ inputs.version }}"
+          exit 1
+        fi
+        echo "✅ Version format OK: ${{ inputs.version }}"
+
+    - name: Release branching
+      id: branch
+      shell: bash
+      run: |
+        BRANCH="release/${{ inputs.module }}-${{ inputs.version }}"
+        mkdir -p .release-log
+        LOG=".release-log/branch-check.log"
+
+        echo "🔍 Checking if branch '$BRANCH' exists on remote..." | tee -a "$LOG"
+        git fetch origin --quiet
+
+        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+          echo "❌ Branch already exists: $BRANCH" | tee -a "$LOG"
+          echo "exists=true" >> $GITHUB_OUTPUT
+          exit 1
+        else
+          echo "🆕 Branch does not exist. Creating new branch: $BRANCH" | tee -a "$LOG"
+          git checkout -B dev origin/dev
+          git checkout -b "$BRANCH"
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
+        git config user.name "${GITHUB_ACTOR}"
+        git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+        echo "📝 Release branch created for ${{ inputs.module }} ${{ inputs.version }}" | tee -a "$LOG"
+        git push origin "$BRANCH"
+
+    # ------------------------
+    # Docker Build + Reproducibility
+    # ------------------------
+    - name: Build Docker Image
+      if: success()
+      shell: bash
+      run: |
+        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}:${{ inputs.version }}"
+        docker build \
+          --cache-from="$IMAGE" \
+          -t "$IMAGE" \
+          -f ${{ inputs.module }}/Dockerfile \
+          ${{ inputs.module }}
+
+        echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+    - name: Validate Reproducible Build
+      if: success()
+      shell: bash
+      run: |
+        HASH1=$(docker inspect --format='{{.Id}}' "$IMAGE")
+        docker build \
+          -t "$IMAGE-test" \
+          -f ${{ inputs.module }}/Dockerfile \
+          ${{ inputs.module }}
+        HASH2=$(docker inspect --format='{{.Id}}' "$IMAGE-test")
+
+        if [[ "$HASH1" != "$HASH2" ]]; then
+          echo "❌ Non-deterministic build detected!"
+          exit 1
+        fi
+        echo "✅ Reproducible build confirmed"
+
+    # ------------------------
+    # Security & Compliance Scan
+    # ------------------------
+    - name: SAST (CodeQL init)
+      if: success()
+      uses: github/codeql-action/init@v3
+      with:
+        languages: java
+
+    - name: SAST (CodeQL analyze)
+      if: success()
+      uses: github/codeql-action/analyze@v3
+
+    - name: Scan Docker Image
+      if: success()
+      uses: aquasecurity/trivy-action@0.20.0
+      with:
+        image-ref: ${{ env.IMAGE }}
+        severity: HIGH,CRITICAL
+        ignore-unfixed: true
+        exit-code: 1
+
+    # ------------------------
+    # Reporting
+    # ------------------------
+    - name: Upload logs / artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-report-${{ inputs.module }}-${{ inputs.version }}
+        path: .release-log/

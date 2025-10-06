@@ -1,0 +1,76 @@
+name: CI Release
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" #  3h UTC Monday Weekly
+  workflow_dispatch:
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: set-matrix
+        env:
+          DOCKER_USER: ${{ secrets.DOCKERHUB_USER }}
+          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKER_REPO: wliamp
+        run: |
+          modules='["pay","merc","gtw","pro","net","iss","aqr","cs","fr","reg"]'
+          images='["payer","merchant","gateway","processor","network","issuer","acquirer","settle","fraud","regulator"]'
+          versions='[]'
+
+          for image in payer merchant gateway processor network issuer acquirer settle fraud regulator; do
+            echo "🔍 Checking latest version for $module ..."
+
+            latest=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1" \
+              | jq -r '.results[0].name' || echo "0.0.0")
+
+            if [[ -z "$latest" || "$latest" == "null" ]]; then
+              latest="0.0.0"
+            fi
+
+            echo "➡️ Found latest on Docker Hub: $latest"
+
+            IFS='.' read -r major minor patch <<< "$latest"
+
+            major=${major:-0}
+            minor=${minor:-0}
+            patch=${patch:-0}
+
+            patch=$((patch + 1))
+
+            if (( patch > 9 )); then
+              patch=0
+              minor=$((minor + 1))
+            fi
+
+            if (( minor > 9 )); then
+              minor=0
+              major=$((major + 1))
+            fi
+
+            next="$major.$minor.$patch"
+            echo "🔢 Next version for $module → $next"
+
+            versions=$(jq -c --arg m "$module" --arg v "$next" \
+              '. + [{"module": $m, "version": $v}]' <<< "${versions:-[]}")
+          done
+
+          echo "matrix=$versions" >> $GITHUB_OUTPUT
+
+  release:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
+    environment: release
+    steps:
+      - uses: ./.github/actions/ci-release
+        with:
+          module: ${{ matrix.module }}
+          image: ${{ matrix.image }}
+          version: ${{ matrix.version }}

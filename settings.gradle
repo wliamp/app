@@ -1,4 +1,4 @@
-rootProject.name = 'repo'
+rootProject.name = 'root'
 
 include 'cmc',
     'odr',
