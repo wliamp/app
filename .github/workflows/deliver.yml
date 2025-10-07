@@ -1,4 +1,4 @@
-name: CD Delivery
+name: Delivery
 
 on:
   push:
@@ -63,7 +63,7 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.define-matrix.outputs.matrix) }}
     steps:
-      - uses: ./.github/actions/cd-delivery
+      - uses: ./.github/actions/deliver
         with:
           module: ${{ matrix.module }}
           image: ${{ matrix.image }}

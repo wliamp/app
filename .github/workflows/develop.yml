@@ -1,4 +1,4 @@
-name: CI Develop
+name: Develop
 
 on:
   push:
@@ -91,6 +91,6 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
     steps:
-      - uses: ./.github/actions/ci-develop
+      - uses: ./.github/actions/develop
         with:
           module: ${{ matrix.module }}

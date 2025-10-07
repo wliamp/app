@@ -1,4 +1,4 @@
-name: CD Deploy
+name: Deploy
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: ./.github/actions/cd-deploy
+    - uses: ./.github/actions/deploy
       with:
         image_repo: ${{ github.event.inputs.repo }}
         image_ver: ${{ github.event.inputs.ver }}

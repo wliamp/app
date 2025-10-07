@@ -1,4 +1,4 @@
-name: CI Release
+name: Release
 
 on:
   schedule:
@@ -92,7 +92,7 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
     environment: release
     steps:
-      - uses: ./.github/actions/ci-release
+      - uses: ./.github/actions/release
         with:
           module: ${{ matrix.module }}
           image: ${{ matrix.image }}
