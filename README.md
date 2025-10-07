@@ -107,7 +107,7 @@ gitGraph
 ```
 <type>(<scope>): <message>
 ```
-#### Type $ Scope
+#### Type & Scope
 - `feat` → add feature
 - `fix` → bug fix / hot fix
 - `docs` → edit documentation
@@ -115,6 +115,7 @@ gitGraph
 - `refactor` → edit code but do not add feature, do not fix bug
 - `test` → add/edit test
 - `chore` → miscellaneous (update dependency, config)
+
 **Scope** as Module
 
 **E.g.**
@@ -226,10 +227,10 @@ flowchart TD
 #### Delivery
 1. **Trigger**: `push` | `pull_request` → `main`
 2. **Steps**:
-- **Branch Validation**: `release/*` | `hotfix/*`
-- **Docker Build & Push**: Build Docker image using tag metadata → push to registry.
-- **Image Scan (Final Gate)**: Re-scan pushed image for vulnerabilities before deploy approval.
-- **Reporting & Notifications**: Generate changelogs, image digests, and send Slack/Discord notifications.
+    - **Branch Validation**: `release/*` | `hotfix/*`
+    - **Docker Build & Push**: Build Docker image using tag metadata → push to registry.
+    - **Image Scan (Final Gate)**: Re-scan pushed image for vulnerabilities before deploy approval.
+    - **Reporting & Notifications**: Generate changelogs, image digests, and send Slack/Discord notifications.
 3. **Visual**
 ```mermaid
 flowchart TD
@@ -244,18 +245,17 @@ flowchart TD
 #### Deployment
 1. **Trigger**: Manual (Admin) or Scheduled
 2. **Steps**:
-- **Staging Deployment**:
-    - Deploy image to staging cluster using K8s manifests or Helm charts.
-    - Run **health checks** and **smoke tests**.
-- **Manual Gate**: Require manual approval before production rollout.
-- **Production Deployment**: Use rolling update or blue-green deployment via Kubernetes.
-- **Observability Integration**:
-    - Collect logs (ELK, Loki, or CloudWatch).
-    - Send metrics to Prometheus + Grafana dashboards.
-    - Trigger alerts (PagerDuty, Opsgenie, etc.) if anomalies are detected.
-- **Post-Deployment Reports**:Summarize uptime, deployment success rate, and rollback readiness.
-
-#### Visual
+    - **Staging Deployment**:
+        - Deploy image to staging cluster using K8s manifests or Helm charts.
+        - Run **health checks** and **smoke tests**.
+    - **Manual Gate**: Require manual approval before production rollout.
+    - **Production Deployment**: Use rolling update or blue-green deployment via Kubernetes.
+    - **Observability Integration**:
+        - Collect logs (ELK, Loki, or CloudWatch).
+        - Send metrics to Prometheus + Grafana dashboards.
+        - Trigger alerts (PagerDuty, Opsgenie, etc.) if anomalies are detected.
+    - **Post-Deployment Reports**: Summarize uptime, deployment success rate, and rollback readiness.
+3. **Visual**
 ```mermaid
 flowchart TD
     B1[Manual/Cron → main]
