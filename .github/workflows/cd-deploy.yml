@@ -29,9 +29,9 @@ jobs:
         staging_namespace: ${{ vars.K8S_STAGING_NAMESPACE }}
         prod_namespace: ${{ vars.K8S_PROD_NAMESPACE }}
         prom: ${{ vars.PROM_PUSH_URL }}
-        slack: ${{ vars.SLACK_WEBHOOK_URL }}
         grafana: ${{ vars.GRAFANA_URL }}
 
+        slack: ${{ secrets.SLACK_WEBHOOK_URL }}
         k8s_config: ${{ secrets.K8S_CONFIG_BASE64 }}
         grafana_key: ${{ secrets.GRAFANA_API_KEY }}
 

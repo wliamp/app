@@ -7,46 +7,73 @@ on:
     branches: [ dev ]
 
 jobs:
+  # ------------------------
+  # Detect which modules changed
+  # ------------------------
   detect-changes:
+    if: >
+      !contains(vars.EXCLUDE_DEVELOP_ACTORS, github.actor)
     runs-on: ubuntu-latest
     outputs:
-      modules: ${{ steps.filter.outputs.changes }}
+      modules: ${{ steps.set-modules.outputs.modules }}
+
     steps:
       - uses: actions/checkout@v4
+
+      # 1️⃣ Generate dynamic filters.yml from vars.MODULE_IMAGE
+      - name: Filter
+        id: gen-filters
+        run: |
+          echo "filters:" > filters.yml
+          jq -r '.[] | "  \(.module):\n    - \(.module)/**"' <<< '${{ vars.MODULE_IMAGE }}' >> filters.yml
+          echo "Generated filters.yml:"
+          cat filters.yml
+
+      # 2️⃣ Use dorny/paths-filter with the generated file
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          filters: |
-            pay:
-              - 'pay/**'
-            merc:
-              - 'merc/**'
-            gtw:
-              - 'gtw/**'
-            pro:
-              - 'pro/**'
-            net:
-              - 'net/**'
-            iss:
-              - 'iss/**'
-            aqr:
-              - 'aqr/**'
-            cs:
-              - 'cs/**'
-            fr:
-              - 'fr/**'
-            reg:
-              - 'reg/**'
+          filters: ${{ hashFiles('filters.yml') }}
+          list-files: json
+          filters-file: filters.yml
 
+      # 3️⃣ Determine which modules to build
+      - name: Set
+        id: set-modules
+        run: |
+          echo "Detected changes: ${{ steps.filter.outputs.changes }}"
+
+          if [[ "${{ steps.filter.outputs.changes }}" != "[]" && -n "${{ steps.filter.outputs.changes }}" ]]; then
+            echo "modules=${{ steps.filter.outputs.changes }}" >> $GITHUB_OUTPUT
+            echo "🔍 Partial CI → modules: ${{ steps.filter.outputs.changes }}"
+          else
+            echo "modules=all" >> $GITHUB_OUTPUT
+            echo "🧱 Change outside modules → trigger full CI"
+          fi
+
+      - name: Clean
+        if: always()
+        run: |
+          rm -f filters.yml
+          echo "Removed temporary filters.yml"
+
+  # ------------------------
+  # Run CI per module
+  # ------------------------
   develop:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.modules != '' }}
-    strategy:
-      matrix:
-        module: ${{ fromJSON(needs.detect-changes.outputs.modules) }}
     runs-on: ubuntu-latest
-    steps:
-    - uses: ./.github/actions/ci-develop
-      with:
-        module: ${{ matrix.module }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          ${{ fromJSON(
+          needs.detect-changes.outputs.modules == 'all' &&
+          toJSON(fromJSON(vars.MODULE_IMAGE).*module) ||
+          needs.detect-changes.outputs.modules
+          ) }}
 
+    steps:
+      - uses: ./.github/actions/ci-develop
+        with:
+          module: ${{ matrix.module }}

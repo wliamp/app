@@ -1,42 +1,3 @@
-name: CD Deploy
-
-on:
-  workflow_dispatch:
-    inputs:
-      repo:
-        description: "Docker Image repo name"
-        required: true
-      ver:
-        description: "Docker image version"
-        required: true
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/cd-deploy
-        with:
-          image_repo: ${{ github.event.inputs.repo }}
-          image_ver: ${{ github.event.inputs.ver }}
-          manifests: ${{ vars.K8S_MANIFESTS_BASE }}/${{ github.event.inputs.repo }}
-
-          image_space: ${{ vars.DOCKERHUB_REPO }}
-          approvers: ${{ vars.APPROVERS }}
-          staging_cluster: ${{ vars.K8S_STAGING_CLUSTER }}
-          prod_cluster: ${{ vars.K8S_PROD_CLUSTER }}
-          staging_namespace: ${{ vars.K8S_STAGING_NAMESPACE }}
-          prod_namespace: ${{ vars.K8S_PROD_NAMESPACE }}
-          prom: ${{ vars.PROM_PUSH_URL }}
-          slack: ${{ vars.SLACK_WEBHOOK_URL }}
-          grafana: ${{ vars.GRAFANA_URL }}
-
-          k8s_config: ${{ secrets.K8S_CONFIG_BASE64 }}
-          grafana_key: ${{ secrets.GRAFANA_API_KEY }}
-
-
-name: "CD Deploy"
 description: |
   - Load kubeconfig from secret
   - Deploy to Staging (namespace configurable)
@@ -47,61 +8,68 @@ description: |
 
 inputs:
   image_space:
-    description: "Docker Image namespace"
     required: true
+    description: "Docker Hub (or registry) namespace where the image resides."
   image_repo:
-    description: "Docker Image repo name"
     required: true
+    description: "Repository name of the Docker image (service name)."
   image_ver:
-    description: "Docker Image version"
     required: true
+    description: "Docker image version tag to deploy (e.g., 'v1.0.0' or commit SHA)."
   staging_cluster:
-    description: "Kubernetes context for staging cluster"
     required: true
+    description: "Kubernetes context name for the Staging environment."
   prod_cluster:
-    description: "Kubernetes context for production cluster"
     required: true
+    description: "Kubernetes context name for the Production environment."
   staging_namespace:
-    description: "Kubernetes namespace for staging"
     required: false
     default: "staging"
+    description: "Namespace to deploy the service in Staging (default: 'staging')."
   prod_namespace:
-    description: "Kubernetes namespace for production"
     required: false
     default: "production"
+    description: "Namespace to deploy the service in Production (default: 'production')."
   health_endpoint:
-    description: "Health check path (on the service)"
     required: false
     default: "/health"
+    description: "Path used for health check during Staging smoke test (default: '/health')."
   approvers:
-    description: "Comma-separated list of GitHub usernames allowed to approve"
     required: true
+    description: "Comma-separated list of GitHub usernames authorized to approve Production rollout."
   manifests:
-    description: "Path to Kubernetes manifests or Helm chart folder"
     required: true
+    description: "Path to Kubernetes manifests or Helm chart directory for deployment."
   approval_timeout_minutes:
-    description: "Timeout for manual approval step (minutes)"
     required: false
     default: "60"
+    description: "Maximum waiting time (in minutes) for manual approval before the job fails."
   k8s_config:
-    description: "Base64-encoded kubeconfig content used to authenticate kubectl commands"
     required: true
+    description: "Base64-encoded kubeconfig content to authenticate kubectl commands."
   prom:
-    description: "Prometheus Push gateway endpoint URL for deployment metrics"
     required: false
+    description: "Prometheus Pushgateway endpoint for sending deployment metrics."
   slack:
-    description: "Slack webhook URL for deployment alerts and notifications"
     required: false
+    description: "Slack Incoming Webhook URL for deployment notifications and alerts."
   grafana:
-    description: "Grafana API base URL for creating deployment annotations"
     required: false
+    description: "Grafana API base URL for posting deployment annotations."
   grafana_key:
-    description: "Grafana API key with permission to post annotations"
     required: false
+    description: "Grafana API key with write permissions for annotations."
 
 runs:
   using: composite
   steps:
+
+    # ==========================================================
+    # ⚙️ STEP 1: Ensure environment
+    # Prints out key deployment parameters for traceability,
+    # verifies required input values, and provides context
+    # on which image and clusters are being targeted.
+    # ==========================================================
     - name: ⚙️ Ensure environment
       shell: bash
       run: |
@@ -110,6 +78,12 @@ runs:
         echo "staging: ctx=${{ inputs.staging_cluster }}, ns=${{ inputs.staging_namespace }}"
         echo "prod: ctx=${{ inputs.prod_cluster }}, ns=${{ inputs.prod_namespace }}"
 
+    # ==========================================================
+    # 🔐 STEP 2: Load kubeconfig (from secret)
+    # Decodes the base64-encoded kubeconfig secret and writes
+    # it to ~/.kube/config, granting kubectl access to clusters.
+    # Aborts immediately if the secret is missing.
+    # ==========================================================
     - name: 🔐 Load kubeconfig (from secret)
       shell: bash
       env:
@@ -125,39 +99,50 @@ runs:
         chmod 600 "$HOME/.kube/config"
         echo "✅ kubeconfig loaded"
 
+    # ==========================================================
+    # 🧩 STEP 3: Staging deployment
+    # Switches to the staging cluster context, ensures the
+    # namespace exists, applies manifests (or Helm chart),
+    # and waits for successful rollout of the service.
+    # ==========================================================
     - name: 🧩 Staging deployment
       shell: bash
       run: |
         set -euo pipefail
         FULL_IMAGE="docker.io/${{ inputs.image_space }}/${{ inputs.image_repo }}:${{ inputs.image_ver }}"
         echo "🚀 Deploying '${FULL_IMAGE}' to staging context '${{ inputs.staging_cluster }}' namespace '${{ inputs.staging_namespace }}'"
-
         kubectl config use-context "${{ inputs.staging_cluster }}"
         kubectl get namespace "${{ inputs.staging_namespace }}" >/dev/null 2>&1 || kubectl create namespace "${{ inputs.staging_namespace }}"
-
         kubectl apply -f "${{ inputs.manifests }}" -n "${{ inputs.staging_namespace }}"
-
         kubectl rollout status deploy/${{ inputs.image_repo }} -n "${{ inputs.staging_namespace }}" --timeout=300s
         echo "✅ Staging rollout finished"
 
+    # ==========================================================
+    # 🧪 STEP 4: Health & Smoke Tests
+    # Executes a lightweight smoke test inside the staging
+    # namespace using curl to validate that the service
+    # responses correctly at the configured health endpoint.
+    # ==========================================================
     - name: 🧪 Health & Smoke Tests
       shell: bash
       run: |
         set -eo pipefail
         echo "Running health check for image=${{ inputs.image_repo }} endpoint=${{ inputs.health_endpoint }}"
-
         SERVICE_HOST="${{ inputs.image_repo }}"
         SERVICE_PORT=${{ env.SERVICE_PORT:-8080 }}
         ENDPOINT="${{ inputs.health_endpoint }}"
-
-        # Run the curl pod to test service reachability inside cluster
         kubectl run --rm -i "${{ inputs.image_repo }}-smoke" --image=curlimages/curl -n "${{ inputs.staging_namespace }}" --restart=Never --command -- sh -c \
           "curl -sf http://${SERVICE_HOST}:$SERVICE_PORT$ENDPOINT || exit 1"
-
         echo "✅ Staging health OK"
       env:
         SERVICE_PORT: 8080
 
+    # ==========================================================
+    # ⏸️ STEP 5: Manual Approval (Production)
+    # Creates a temporary GitHub Issue and waits for an
+    # authorized approver to manually approve before
+    # proceeding to production rollout. Enforces timeout.
+    # ==========================================================
     - name: ⏸️ Manual Approval (Production)
       uses: trstringer/manual-approval@v1
       with:
@@ -171,20 +156,31 @@ runs:
           Please approve deployment to Production.
         timeout-minutes: ${{ inputs.approval_timeout_minutes }}
 
+    # ==========================================================
+    # 🧩 STEP 6: Production rollout
+    # Switches to the production cluster context, ensures
+    # namespace existence, applies manifests, and monitors
+    # rollout until completion. Timeout set to 10 minutes.
+    # ==========================================================
     - name: 🧩 Production rollout
       shell: bash
       run: |
         set -euo pipefail
         FULL_IMAGE="docker.io/${{ inputs.image_space }}/${{ inputs.image_repo }}:${{ inputs.image_ver }}"
         echo "🚀 Rolling out '${FULL_IMAGE}' to production context '${{ inputs.prod_cluster }}' namespace '${{ inputs.prod_namespace }}'"
-
         kubectl config use-context "${{ inputs.prod_cluster }}"
         kubectl get namespace "${{ inputs.prod_namespace }}" >/dev/null 2>&1 || kubectl create namespace "${{ inputs.prod_namespace }}"
-
         kubectl apply -f "${{ inputs.manifests }}" -n "${{ inputs.prod_namespace }}"
         kubectl rollout status deploy/${{ inputs.image_repo }} -n "${{ inputs.prod_namespace }}" --timeout=600s
         echo "✅ Production rollout completed"
 
+    # ==========================================================
+    # 📊 STEP 7: Observability & Alerts (safe)
+    # Collects recent deployment logs and checks for error
+    # patterns. Pushes metrics to Prometheus, creates
+    # Grafana annotations, and sends Slack alerts — all
+    # optional and safely skipped if configs are missing.
+    # ==========================================================
     - name: 📊 Observability & Alerts (safe)
       shell: bash
       env:
@@ -195,9 +191,7 @@ runs:
       run: |
         set -euo pipefail
         echo "Collecting recent logs for ${{ inputs.image_repo }}"
-
         kubectl logs -l app=${{ inputs.image_repo }} -n "${{ inputs.prod_namespace }}" --tail=300 > deploy_logs.txt || true
-
         if grep -qE "ERROR|Exception|Fail|panic" deploy_logs.txt; then
           echo "⚠️ Errors detected in deployment logs"
           DEPLOY_STATUS=0
@@ -209,7 +203,6 @@ runs:
           ALERT_COLOR="#36a64f"
           ALERT_MSG="✅ *Deployment successful!* image *${{ inputs.image_repo }}* (version *${{ inputs.image_ver }}*) is healthy."
         fi
-
         if [ -n "${PROM_PUSH_URL:-}" ]; then
           echo "📈 Pushing deployment metrics to ${PROM_PUSH_URL}"
           cat <<EOF | curl --silent --show-error --data-binary @- "${PROM_PUSH_URL}/metrics/job/deployment/image/${{ inputs.image_repo }}"
@@ -218,28 +211,31 @@ runs:
         deployment_version_info{image="${{ inputs.image_repo }}",version="${{ inputs.image_ver }}"} 1
         EOF
         else
-        echo "⚠️ PROM_PUSH_URL not configured - skipping metrics push"
+          echo "⚠️ PROM_PUSH_URL not configured - skipping metrics push"
         fi
-
         if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_API_KEY:-}" ]; then
-        echo "🧠 Creating Grafana annotation"
-        curl -s -X POST "${GRAFANA_URL}/api/annotations" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
-        -d "$(jq -n --arg text "Deployment of ${{ inputs.image_repo }}:${{ inputs.image_ver }}" --arg tags "deployment,${{ inputs.image_repo }}" '{text: $text, tags: ($tags | split(","))}')" || echo "⚠️ Failed to push Grafana annotation"
-          else
+          echo "🧠 Creating Grafana annotation"
+          curl -s -X POST "${GRAFANA_URL}/api/annotations" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+            -d "$(jq -n --arg text "Deployment of ${{ inputs.image_repo }}:${{ inputs.image_ver }}" --arg tags "deployment,${{ inputs.image_repo }}" '{text: $text, tags: ($tags | split(","))}')" || echo "⚠️ Failed to push Grafana annotation"
+        else
           echo "⚠️ Grafana not configured - skipping annotation"
-          fi
-
-          if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+        fi
+        if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
           echo "💬 Sending Slack notification"
           curl -s -X POST "${SLACK_WEBHOOK_URL}" \
-        -H "Content-Type: application/json" \
-        -d "$(jq -n --arg text "${ALERT_MSG}" --arg color "${ALERT_COLOR}" '{attachments: [{color: $color, text: $text}]}')" || echo "⚠️ Failed to send Slack alert"
-          else
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg text "${ALERT_MSG}" --arg color "${ALERT_COLOR}" '{attachments: [{color: $color, text: $text}]}')" || echo "⚠️ Failed to send Slack alert"
+        else
           echo "⚠️ Slack webhook not configured - skipping alert"
-          fi
+        fi
 
+    # ==========================================================
+    # 📋 STEP 8: Summary & Reporting
+    # Generates a deployment summary file (report.txt)
+    # containing image, context, and timestamp details.
+    # ==========================================================
     - name: 📋 Summary & Reporting
       shell: bash
       run: |
@@ -250,10 +246,15 @@ runs:
         Staging: context=${{ inputs.staging_cluster }} ns=${{ inputs.staging_namespace }}
         Production: context=${{ inputs.prod_cluster }} ns=${{ inputs.prod_namespace }}
         Timestamp: $(date -u)
-          EOF
-          echo "Upload artifact"
+        EOF
+        echo "Upload artifact"
 
-    - name: Artifact
+    # ==========================================================
+    # 📦 STEP 9: Artifact upload
+    # Uploads the generated deployment summary as a
+    # downloadable artifact for post-deployment tracking.
+    # ==========================================================
+    - name: 📦 Artifact upload
       uses: actions/upload-artifact@v4
       with:
         name: cd-report-${{ inputs.image_repo }}

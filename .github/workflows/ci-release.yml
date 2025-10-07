@@ -15,7 +15,7 @@ jobs:
 
     - id: set-matrix
       env:
-        DOCKER_USER: ${{ secrets.DOCKERHUB_USER }}
+        DOCKER_USER: ${{ vars.DOCKERHUB_USER }}
         DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         DOCKER_REPO: ${{ vars.DOCKERHUB_REPO }}
         MODULE_IMAGE: ${{ vars.MODULE_IMAGE }}

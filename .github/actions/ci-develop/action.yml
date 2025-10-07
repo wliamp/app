@@ -1,12 +1,11 @@
-name: "CI Dev"
 description: |
   - Branch validation
   - Dependency caching
   - Static & Security analysis
   - Testing & Building
   - Artifact upload
-  - Aggregate
-  - Image pre-build & scan
+  - Aggregate validation
+  - Image pre-build & vulnerability scan
 
 inputs:
   module:
@@ -16,10 +15,12 @@ inputs:
 runs:
   using: composite
   steps:
-    # ------------------------
-    # Branch Validation
-    # ------------------------
-    - name: Validate
+    # ==========================================================
+    # 🧭 STEP 1: Validate branch naming convention
+    # Ensures that only allowed branches (main, release/*, feature/*, bugfix/*)
+    # can trigger CI to maintain consistent workflow rules.
+    # ==========================================================
+    - name: 🔍 Validate Branch Naming
       shell: bash
       run: |
         BRANCH="${GITHUB_REF#refs/heads/}"
@@ -29,17 +30,30 @@ runs:
         fi
         echo "✅ Branch validation passed for $BRANCH"
 
-    # ------------------------
-    # Checkout & Setup
-    # ------------------------
-    - uses: actions/checkout@v4
+    # ==========================================================
+    # 📦 STEP 2: Checkout repository
+    # Pulls the repository code into the runner for subsequent steps.
+    # ==========================================================
+    - name: 🧩 Checkout Source Code
+      uses: actions/checkout@v4
 
-    - uses: actions/setup-java@v4
+    # ==========================================================
+    # ☕ STEP 3: Setup Java environment
+    # Sets up Temurin JDK 25 for Gradle build and test execution.
+    # ==========================================================
+    - name: ⚙️ Setup Java 25 (Temurin)
+      uses: actions/setup-java@v4
       with:
         java-version: '25'
         distribution: 'temurin'
 
-    - uses: actions/cache@v4
+    # ==========================================================
+    # 🚀 STEP 4: Restore Gradle cache
+    # Restores previously cached Gradle dependencies and wrapper
+    # to speed up build times and reduce redundant downloads.
+    # ==========================================================
+    - name: 💾 Restore Gradle Cache
+      uses: actions/cache@v4
       with:
         path: |
           ~/.gradle/caches
@@ -48,46 +62,63 @@ runs:
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    # ------------------------
-    # Static & Security Analysis
-    # ------------------------
-    - name: Check
+    # ==========================================================
+    # 🔍 STEP 5: Static code analysis
+    # Runs Gradle `check` task (includes lint, static analysis, etc.)
+    # to detect style and potential issues early.
+    # ==========================================================
+    - name: 🧠 Static Code Analysis
       shell: bash
       run: ./gradlew :${{ inputs.module }}:check
 
-    - name: Dependency Vulnerability Scan
+    # ==========================================================
+    # 🛡️ STEP 6: Dependency vulnerability scan
+    # Uses Anchore to scan dependencies for known vulnerabilities.
+    # Build will fail on findings with severity ≥ HIGH.
+    # ==========================================================
+    - name: 🧩 Dependency Security Scan
       uses: anchore/scan-action@v4
       with:
         path: .
         fail-build: true
         severity-cutoff: high
 
-    # ------------------------
-    # Testing & Building
-    # ------------------------
-    - name: Test + Build + Coverage
+    # ==========================================================
+    # 🧪 STEP 7: Run tests and build module
+    # Executes unit tests, integration tests, and generates coverage report.
+    # ==========================================================
+    - name: 🧪 Test, Build & Coverage
       shell: bash
       env:
         SPRING_PROFILES_ACTIVE: test
       run: ./gradlew :${{ inputs.module }}:clean build jacocoTestReport
 
-    # ------------------------
-    # Artifact Upload
-    # ------------------------
-    - uses: actions/upload-artifact@v4
+    # ==========================================================
+    # 📊 STEP 8: Upload test report artifact
+    # Stores test result reports as GitHub Action artifacts for later review.
+    # ==========================================================
+    - name: 📤 Upload Test Report
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.module }}-test-report
         path: ${{ inputs.module }}/build/reports/tests/test
 
-    - uses: actions/upload-artifact@v4
+    # ==========================================================
+    # 📈 STEP 9: Upload code coverage report
+    # Publishes generated JaCoCo coverage report as build artifact.
+    # ==========================================================
+    - name: 📤 Upload Coverage Report
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.module }}-coverage-report
         path: ${{ inputs.module }}/build/reports/jacoco/test/html
 
-    # ------------------------
-    # Aggregate Validation (e.g. no-changes, consistency)
-    # ------------------------
-    - name: Aggregate
+    # ==========================================================
+    # 🔄 STEP 10: Aggregate validation
+    # Checks if the latest commit introduces relevant changes (excluding docs).
+    # Skips heavy downstream jobs when no code changes are detected.
+    # ==========================================================
+    - name: 🔎 Aggregate Change Validation
       shell: bash
       run: |
         if git diff --quiet HEAD^ HEAD -- ':!**/README.md'; then
@@ -96,10 +127,12 @@ runs:
           echo "✅ Relevant changes detected, continuing."
         fi
 
-    # ------------------------
-    # Image Pre-Build & Scan
-    # ------------------------
-    - name: Pre-Build
+    # ==========================================================
+    # 🧱 STEP 11: Pre-build Docker image (build stage only)
+    # Builds an intermediate image targeting the 'build' stage to validate
+    # Dockerfile integrity and dependencies without producing the final artifact.
+    # ==========================================================
+    - name: 🐳 Pre-Build Docker Image
       shell: bash
       run: |
         docker build \
@@ -108,7 +141,12 @@ runs:
           -f ${{ inputs.module }}/Dockerfile \
           ${{ inputs.module }}
 
-    - name: Scan
+    # ==========================================================
+    # 🔬 STEP 12: Container image vulnerability scan
+    # Scans the pre-built Docker image for OS and dependency vulnerabilities
+    # using Trivy, failing on HIGH or CRITICAL findings.
+    # ==========================================================
+    - name: 🔬 Scan Docker Image (Trivy)
       uses: aquasecurity/trivy-action@0.20.0
       with:
         image-ref: ci-${{ inputs.module }}:prebuild

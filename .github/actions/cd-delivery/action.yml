@@ -1,39 +1,54 @@
-name: "CD Delivery Step"
-description: "Build, push, and scan Docker image as part of the delivery pipeline."
+description: |
+  - Branch validation (only release/* allowed)
+  - Docker image build and tagging
+  - Image push to target registry
+  - Security scan using Trivy
+  - Report generation and artifact upload
+  - Slack notification for delivery completion
+  - Cleanup of the release branch
 
 inputs:
   module:
     required: true
-    description: "Path to the module or service directory containing the Dockerfile"
+    description: "Relative path to the service or module directory containing the Dockerfile."
   image:
     required: true
-    description: "Docker image name to be built (without registry prefix)"
+    description: "Logical name of the Docker image to be built (without registry prefix)."
   version:
     required: true
-    description: "Image version tag (e.g., 'v1.0.0' or commit SHA)"
+    description: "Version tag assigned to the built image (e.g., 'v1.0.0' or commit SHA)."
   docker_user:
     required: true
-    description: "Docker registry username or service account used for authentication"
+    description: "Username or service account used to authenticate to the Docker registry."
   docker_token:
     required: true
-    description: "Docker registry password or token used for login"
+    description: "Access token or password used for Docker registry authentication."
   docker_repo:
     required: true
-    description: "Target Docker repository or registry namespace"
+    description: "Target Docker registry repository or namespace to push the built image."
   slack:
     required: true
-    description: "Slack Webhook notification receive"
+    description: "Incoming Slack Webhook URL used to send delivery status notifications."
   pat:
     required: true
-    description: "Github Personal Access Token"
+    description: "GitHub Personal Access Token (PAT) used for authenticated branch cleanup operations."
 
 runs:
   using: composite
   steps:
-    - name: 🧩 Checkout
+    # ==========================================================
+    # 🧭 STEP 1: Checkout repository
+    # Retrieves the source code for building the Docker image.
+    # ==========================================================
+    - name: 🧩 Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Validate
+    # ==========================================================
+    # 🧾 STEP 2: Validate branch
+    # Ensures that only release branches (release/*) can trigger
+    # the delivery pipeline to prevent accidental deployments.
+    # ==========================================================
+    - name: 🔍 Validate Release Branch
       shell: bash
       run: |
         BRANCH="${GITHUB_REF#refs/heads/}"
@@ -43,7 +58,12 @@ runs:
         fi
         echo "✅ Branch validation passed for $BRANCH"
 
-    - name: 🏗️ Build
+    # ==========================================================
+    # 🏗️ STEP 3: Build Docker image
+    # Builds the Docker image from the provided module directory.
+    # Tags the image using the specified registry, image name, and version.
+    # ==========================================================
+    - name: 🏗️ Build Docker Image
       shell: bash
       run: |
         IMAGE="${{ inputs.docker_repo }}/${{ inputs.image }}:${{ inputs.version }}"
@@ -51,13 +71,23 @@ runs:
         docker build -t "$IMAGE" -f "${{ inputs.module }}/Dockerfile" "${{ inputs.module }}"
         echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
-    - name: 🚀 Push
+    # ==========================================================
+    # 🚀 STEP 4: Push Docker image
+    # Authenticates to the registry using provided credentials
+    # and pushes the built image to the specified repository.
+    # ==========================================================
+    - name: 🚀 Push Docker Image
       shell: bash
       run: |
         echo "${{ inputs.docker_token }}" | docker login -u "${{ inputs.docker_user }}" --password-stdin
         docker push "$IMAGE"
 
-    - name: 🧠 Scan
+    # ==========================================================
+    # 🧠 STEP 5: Scan Docker image vulnerabilities
+    # Uses Trivy to scan the pushed Docker image for known
+    # security vulnerabilities. Fails on HIGH or CRITICAL issues.
+    # ==========================================================
+    - name: 🛡️ Scan Docker Image (Trivy)
       uses: aquasecurity/trivy-action@0.20.0
       with:
         image-ref: ${{ env.IMAGE }}
@@ -65,7 +95,12 @@ runs:
         ignore-unfixed: true
         exit-code: 1
 
-    - name: 🧾 Report
+    # ==========================================================
+    # 🧾 STEP 6: Generate build report
+    # Captures the image digest and creates a delivery report file
+    # summarizing the completed build and digest info.
+    # ==========================================================
+    - name: 🧾 Generate Delivery Report
       shell: bash
       run: |
         DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")
@@ -73,22 +108,37 @@ runs:
         echo "✅ Build completed for $IMAGE" > report.txt
         echo "🔑 Digest: $DIGEST" >> report.txt
 
-    - name: 📤 Artifact
+    # ==========================================================
+    # 📦 STEP 7: Upload delivery artifacts
+    # Uploads the generated report file as a build artifact
+    # for traceability and post-deployment validation.
+    # ==========================================================
+    - name: 📤 Upload Delivery Report
       uses: actions/upload-artifact@v4
       with:
         name: release-report-${{ inputs.module }}-${{ inputs.version }}
         path: report.txt
 
-    - name: 📣 Notify
+    # ==========================================================
+    # 📣 STEP 8: Notify Slack channel
+    # Sends a success notification to Slack via incoming webhook
+    # to inform the team that the delivery pipeline has completed.
+    # ==========================================================
+    - name: 📣 Notify Slack (Delivery Complete)
       shell: bash
       env:
         WEBHOOK_URL: ${{ inputs.slack }}
       run: |
-        MESSAGE="✅ CD Delivery completed for branch: $GITHUB_REF_NAME"
+        MESSAGE="✅ CD Delivery completed successfully for branch: $GITHUB_REF_NAME"
         curl -X POST -H "Content-Type: application/json" \
           --data "{\"text\":\"$MESSAGE\"}" $WEBHOOK_URL
 
-    - name: 🧹 Delete
+    # ==========================================================
+    # 🧹 STEP 9: Delete temporary release branch
+    # Cleans up by deleting the source branch after successful delivery.
+    # Uses the provided GitHub PAT for authentication.
+    # ==========================================================
+    - name: 🧹 Delete Release Branch
       shell: bash
       env:
         PAT: ${{ inputs.pat }}
@@ -106,5 +156,4 @@ runs:
           -H "Authorization: token $PAT" \
           -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/git/refs/heads/$BRANCH"
-
         echo "✅ Branch $BRANCH deletion request sent"

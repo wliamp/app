@@ -40,8 +40,10 @@ jobs:
           module: ${{ matrix.module }}
           image: ${{ matrix.image }}
           version: ${{ matrix.version }}
-          docker_user: ${{ secrets.DOCKERHUB_USER }}
-          docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+          docker_user: ${{ vars.DOCKERHUB_USER }}
           docker_repo: ${{ vars.DOCKERHUB_REPO }}
+
+          docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
           slack: ${{ secrets.SLACK_WEBHOOK_URL }}
           pat: ${{ secrets.PAT }}
