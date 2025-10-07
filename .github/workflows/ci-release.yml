@@ -7,50 +7,83 @@ on:
 
 jobs:
   resolve-version:
+    # ==========================================================
+    # 🧮 JOB: Resolve Next Release Versions
+    # Purpose:
+    #   - Automatically determines the **next semantic version** for each module
+    #     in the multi-module system by inspecting the latest Docker image tags.
+    #
+    # How it works:
+    #   1. Reads the `vars.MODULE_IMAGE` variable — a JSON array describing all modules:
+    #        [
+    #          {"module": "auth", "image": "auth-service"},
+    #          {"module": "payment", "image": "payment-service"}
+    #        ]
+    #
+    #   2. For each module:
+    #        → Queries Docker Hub API for the latest existing tag of its image.
+    #        → Parses the current semantic version (e.g., 1.2.3).
+    #        → Increments the patch number automatically:
+    #             - patch + 1
+    #             - rolls over to minor if patch > 9
+    #             - rolls over to major if minor > 9
+    #        → Builds a JSON matrix entry:
+    #             {"module": "auth", "version": "1.2.4"}
+    #
+    #   3. Exports this version matrix to `GITHUB_OUTPUT` for downstream job(s).
+    #
+    # Use case:
+    #   - This job standardizes version management across all images,
+    #     ensuring consistent automated version bumps before release builds.
+    #
+    # Notes:
+    #   - Authentication to Docker Hub is done via `DOCKERHUB_USER` and `DOCKERHUB_TOKEN`.
+    #   - If a module’s image has never been released, it defaults to version `0.0.0`.
+    # ==========================================================
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - id: set-matrix
-      env:
-        DOCKER_USER: ${{ vars.DOCKERHUB_USER }}
-        DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        DOCKER_REPO: ${{ vars.DOCKERHUB_REPO }}
-        MODULE_IMAGE: ${{ vars.MODULE_IMAGE }}
-      run: |
-        #!/bin/bash
-        set -euo pipefail
-        versions='[]'
-        echo "$MODULE_IMAGE" | jq -c '.[]' | while read -r item; do
-          module=$(jq -r '.module' <<< "$item")
-          image=$(jq -r '.image' <<< "$item")
-          echo "🔍 Checking latest version for $module / $image ..."
-          latest=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1" \
-            | jq -r '.results[0].name' || echo "0.0.0")
-          if [[ -z "$latest" || "$latest" == "null" ]]; then
-            latest="0.0.0"
-          fi
-          echo "➡️ Found latest on Docker Hub: $latest"
-          IFS='.' read -r major minor patch <<< "$latest"
-          major=${major:-0}
-          minor=${minor:-0}
-          patch=${patch:-0}
-          patch=$((patch + 1))
-          if (( patch > 9 )); then
-            patch=0
-            minor=$((minor + 1))
-          fi
-          if (( minor > 9 )); then
-            minor=0
-            major=$((major + 1))
-          fi
-          next="$major.$minor.$patch"
-          echo "🔢 Next version for $module → $next"
-          versions=$(jq -c --arg m "$module" --arg v "$next" '. + [{"module": $m, "version": $v}]' <<< "${versions:-[]}")
-        done
-        echo "matrix=$versions" >> $GITHUB_OUTPUT
+      - id: set-matrix
+        env:
+          DOCKER_USER: ${{ vars.DOCKERHUB_USER }}
+          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKER_REPO: ${{ vars.DOCKERHUB_REPO }}
+          MODULE_IMAGE: ${{ vars.MODULE_IMAGE }}
+        run: |
+          #!/bin/bash
+          set -euo pipefail
+          versions='[]'
+          echo "$MODULE_IMAGE" | jq -c '.[]' | while read -r item; do
+            module=$(jq -r '.module' <<< "$item")
+            image=$(jq -r '.image' <<< "$item")
+            echo "🔍 Checking latest version for $module / $image ..."
+            latest=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1" \
+              | jq -r '.results[0].name' || echo "0.0.0")
+            if [[ -z "$latest" || "$latest" == "null" ]]; then
+              latest="0.0.0"
+            fi
+            echo "➡️ Found latest on Docker Hub: $latest"
+            IFS='.' read -r major minor patch <<< "$latest"
+            major=${major:-0}
+            minor=${minor:-0}
+            patch=${patch:-0}
+            patch=$((patch + 1))
+            if (( patch > 9 )); then
+              patch=0
+              minor=$((minor + 1))
+            fi
+            if (( minor > 9 )); then
+              minor=0
+              major=$((major + 1))
+            fi
+            next="$major.$minor.$patch"
+            echo "🔢 Next version for $module → $next"
+            versions=$(jq -c --arg m "$module" --arg v "$next" '. + [{"module": $m, "version": $v}]' <<< "${versions:-[]}")
+          done
+          echo "matrix=$versions" >> $GITHUB_OUTPUT
 
   release:
     needs: resolve-version
@@ -59,8 +92,8 @@ jobs:
       matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
     environment: release
     steps:
-    - uses: ./.github/actions/ci-release
-      with:
-        module: ${{ matrix.module }}
-        image: ${{ matrix.image }}
-        version: ${{ matrix.version }}
+      - uses: ./.github/actions/ci-release
+        with:
+          module: ${{ matrix.module }}
+          image: ${{ matrix.image }}
+          version: ${{ matrix.version }}

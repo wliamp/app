@@ -8,9 +8,38 @@ on:
 
 jobs:
   define-matrix:
+    # ==========================================================
+    # 🧩 JOB: Define Delivery Matrix
+    # Purpose:
+    #   - Dynamically constructs a build matrix for CD Delivery pipeline.
+    #
+    # Conditional Logic:
+    #   - The job runs **only** if the triggering GitHub actor is *not included* in
+    #     `vars.EXCLUDE_DELIVERY_ACTORS` — allowing fine-grained delivery restrictions.
+    # ==========================================================
     if: >
       !contains(vars.EXCLUDE_DELIVERY_ACTORS, github.actor)
     runs-on: ubuntu-latest
+    # ==========================================================
+    # How it works:
+    #   1. Reads `vars.MODULE_IMAGE`, which is expected to be a JSON array like:
+    #        [
+    #          {"module": "auth", "image": "auth-service"},
+    #          {"module": "payment", "image": "payment-service"}
+    #        ]
+    #
+    #   2. Generates a unique version tag using the current date + short commit SHA.
+    #        e.g., "20251007-ab12cd3"
+    #
+    #   3. Iterates through the list, producing an array of objects in the form:
+    #        [
+    #          {"module":"auth","image":"auth-service","version":"20251007-ab12cd3"},
+    #          {"module":"payment","image":"payment-service","version":"20251007-ab12cd3"}
+    #        ]
+    #
+    #   4. Exports this array as JSON to the job output (`matrix`), which is then
+    #      consumed by the downstream `delivery` job to execute each deployment in parallel.
+    # ==========================================================
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
@@ -33,7 +62,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.define-matrix.outputs.matrix) }}
-    name: Build & Push → ${{ matrix.module }}
     steps:
       - uses: ./.github/actions/cd-delivery
         with:

@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       repo:
-        description: "Docker Image repo name"
+        description: "Repository name of the Docker image (service name)."
         required: true
       ver:
-        description: "Docker image version"
+        description: "Docker image version tag to deploy (e.g., 'v1.0.0' or commit SHA)."
         required: true
 
 jobs:

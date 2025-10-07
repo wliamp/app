@@ -7,72 +7,89 @@ on:
     branches: [ dev ]
 
 jobs:
-  # ------------------------
-  # Detect which modules changed
-  # ------------------------
   detect-changes:
+    # ==========================================================
+    # 🔍 JOB: Detect Changed Modules
+    # Purpose:
+    #   - Dynamically determines which modules in the repo were modified
+    #     in the latest push or pull request targeting the `dev` branch.
+    #
+    # Conditional Logic:
+    #   - The job only runs if the triggering actor is *not included* in
+    #     `vars.EXCLUDE_DEVELOP_ACTORS`, allowing certain accounts to bypass CI.
+    # ==========================================================
     if: >
       !contains(vars.EXCLUDE_DEVELOP_ACTORS, github.actor)
     runs-on: ubuntu-latest
+    # ==========================================================
+    # How it works:
+    #   1. Reads `vars.MODULE_IMAGE`, a JSON array describing all modules, e.g.:
+    #        [
+    #          {"module": "auth", "image": "auth-service"},
+    #          {"module": "payment", "image": "payment-service"}
+    #        ]
+    #
+    #   2. Generates a temporary `filters.yml` file mapping each module to its folder:
+    #        auth:
+    #          - auth/**
+    #        payment:
+    #          - payment/**
+    #
+    #   3. Uses the `dorny/paths-filter` action to detect which module paths changed
+    #      compared to the base branch (GitHub automatically provides the diff context).
+    #
+    #   4. If changes are found:
+    #        → Builds a partial matrix containing only those modules (faster CI).
+    #      If **no** changes are detected:
+    #        → Falls back to include all modules (full CI mode).
+    #
+    #   5. Exports this JSON matrix via `GITHUB_OUTPUT`, so the next job (`develop`)
+    #      can run each module’s CI pipeline independently in parallel.
+    # ==========================================================
     outputs:
-      modules: ${{ steps.set-modules.outputs.modules }}
-
+      matrix: ${{ steps.prepare.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
 
-      # 1️⃣ Generate dynamic filters.yml from vars.MODULE_IMAGE
-      - name: Filter
-        id: gen-filters
+      - id: gen-filters
         run: |
           echo "filters:" > filters.yml
           jq -r '.[] | "  \(.module):\n    - \(.module)/**"' <<< '${{ vars.MODULE_IMAGE }}' >> filters.yml
-          echo "Generated filters.yml:"
+          echo "::notice::Generated filters.yml:"
           cat filters.yml
 
-      # 2️⃣ Use dorny/paths-filter with the generated file
-      - uses: dorny/paths-filter@v3
-        id: filter
+      - id: filter
+        uses: dorny/paths-filter@v3
         with:
-          filters: ${{ hashFiles('filters.yml') }}
           list-files: json
+          filters: ${{ hashFiles('filters.yml') }}
           filters-file: filters.yml
 
-      # 3️⃣ Determine which modules to build
-      - name: Set
-        id: set-modules
+      - id: prepare
         run: |
-          echo "Detected changes: ${{ steps.filter.outputs.changes }}"
-
+          echo "::notice::Detected changes: ${{ steps.filter.outputs.changes }}"
           if [[ "${{ steps.filter.outputs.changes }}" != "[]" && -n "${{ steps.filter.outputs.changes }}" ]]; then
-            echo "modules=${{ steps.filter.outputs.changes }}" >> $GITHUB_OUTPUT
-            echo "🔍 Partial CI → modules: ${{ steps.filter.outputs.changes }}"
+            echo "::notice::Partial CI mode for modules: ${{ steps.filter.outputs.changes }}"
+            modules='${{ steps.filter.outputs.changes }}'
           else
-            echo "modules=all" >> $GITHUB_OUTPUT
-            echo "🧱 Change outside modules → trigger full CI"
+            echo "::warning::No specific module changed → full CI triggered"
+            modules=$(jq -c '[.[] | {module: .module}]' <<< '${{ vars.MODULE_IMAGE }}')
           fi
+          echo "matrix=$modules" >> $GITHUB_OUTPUT
+          echo "::notice::Matrix prepared → $modules"
 
-      - name: Clean
-        if: always()
+      - if: always()
         run: |
           rm -f filters.yml
-          echo "Removed temporary filters.yml"
+          echo "::notice::Cleaned up temporary filters.yml"
 
-  # ------------------------
-  # Run CI per module
-  # ------------------------
   develop:
     needs: detect-changes
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          ${{ fromJSON(
-          needs.detect-changes.outputs.modules == 'all' &&
-          toJSON(fromJSON(vars.MODULE_IMAGE).*module) ||
-          needs.detect-changes.outputs.modules
-          ) }}
-
+        include: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
     steps:
       - uses: ./.github/actions/ci-develop
         with:
