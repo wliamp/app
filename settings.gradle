@@ -1,12 +1,12 @@
 rootProject.name = 'root'
 
-include 'cmc',
-    'odr',
-    'odr:cko',
-    'odr:pay'
-
-project(':cmc').projectDir = file('communication')
-
-project(':odr').projectDir = file('order-lifecycle')
-project(':odr:cko').projectDir = file('order-lifecycle/checkout')
-project(':odr:pay').projectDir = file('order-lifecycle/payment')
+include 'pay',
+    'merc',
+    'gtw',
+    'pro',
+    'net',
+    'iss',
+    'aqr',
+    'cs',
+    'fr',
+    'reg'
