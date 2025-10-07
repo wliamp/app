@@ -1,16 +1,14 @@
 # Authorize
-### Implement `POST /v1/authorize`
-- Validate signature + idempotency headers
-- Publish Kafka `auth.request.v1`
-- Persist request state if needed (Redis/in-memory)
-### Kafka consumer:
-- Subscribe `auth.result.v1`
-- Update request state and POST result to Merchant webhook
-### `MerchantCallbackClient`:
-- Async retry/backoff
-- Correlate via correlationId
-### Add OpenTelemetry trace propagation 
-Merchant → Gateway → Processor
+* Implement `POST /v1/authorize` endpoint for external merchants.
+* Validate merchant credentials and payload structure.
+* Generate `transactionId` and `correlationId`.
+* Persist initial record in transactions table with **INITIATED** status.
+* Publish `payment.authorize.request.v1` and audit.log.v1.
+* Consume `payment.authorize.result.v1` to update transaction status.
+* Implement idempotency via `orderId` or `Idempotency-Key`.
+* Implement outbox pattern for reliable Kafka publishing.
+* Expose callback dispatcher to notify merchants.
+* Add tracing, structured logs, and metrics (`gateway.requests`, `publish.failures`).
 
 ---
 

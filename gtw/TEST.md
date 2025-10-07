@@ -1,7 +1,10 @@
 # Authorize
-- Validate signature logic (valid, invalid, missing header)
-- Test Kafka publish success/failure cases
-- Verify duplicate request returns cached response
-- Ensure callback sent exactly once per txn
-- Integration: Merchant → Gateway → Kafka round-trip
-- Load test: callback latency **<500ms**, deduplication works
+* Unit test: request validation, idempotency key logic.
+* Unit test: database persistence and status transitions.
+* Unit test: event payload mapping for both request and audit topics.
+* Integration test: full round-trip with Processor mock.
+* Failure test: Kafka publish error → outbox recovery.
+* Negative test: duplicate requests, invalid schema, missing auth.
+* Performance test: **SLA < 2s** for synchronous ACK.
+
+---

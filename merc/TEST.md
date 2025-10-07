@@ -1,11 +1,9 @@
 # Authorize
-- Verify `/api/v1/pay` returns correct ACK on valid input
-- Validate DB record created with correct status
-- Simulate Gateway responses: **ACCEPTED** / **REJECTED** / **5xx**
-- Test idempotent requests (same `orderId` → same `txnId`)
-- Validate webhook updates status correctly
-- Webhook with invalid `txn` → logged but ignored
-- Integration: `/pay` → ACK → webhook → final **APPROVED**
-- Performance: **100 req/s**, avg ACK **<1s**, webhook latency **<200ms**
+* Unit test: validate serialization/deserialization of Gateway request/response.
+* Unit test: verify order persistence and status updates.
+* Integration test: full flow with Gateway mock (ACK + callback).
+* Integration test: retry behavior when webhook fails.
+* Negative test: invalid input, network timeout, duplicate `orderId`.
+* Observability test: ensure `correlationId` logged across flows.
 
 ---
