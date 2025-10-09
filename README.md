@@ -1,6 +1,4 @@
-# 🔧 Payment Pipeline Simulator
-
-## 📁 Actor as Microservice (Module)
+## 🔧 Actors
 
 - [👤 Payer (Customer / Cardholder)](./pay) – The end customer who initiates the payment using a card, bank account, or digital wallet. Responsible for authorizing transactions and providing payment credentials.
 
