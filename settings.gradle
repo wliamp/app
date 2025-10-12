@@ -9,5 +9,4 @@ include 'pay',
     'aqr',
     'cs',
     'fr',
-    'reg',
-    'common'
+    'reg'
