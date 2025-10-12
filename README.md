@@ -1,6 +1,4 @@
-## 🔧 Actors
-
-- [👤 Payer (Customer / Cardholder)](./pay) – The end customer who initiates the payment using a card, bank account, or digital wallet. Responsible for authorizing transactions and providing payment credentials.
+## 🔧 Modules
 
 - [🛍️ Merchant](./merc) – The business or service provider accepting payments. Submits payment requests, receives funds, and reconciles transactions.
 

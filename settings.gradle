@@ -1,7 +1,6 @@
 rootProject.name = 'root'
 
-include 'pay',
-    'merc',
+include 'merc',
     'gtw',
     'pro',
     'net',
