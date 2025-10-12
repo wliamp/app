@@ -1,5 +1,5 @@
 description: |
-  - Auto-branching from dev branch
+  - Auto-tagging from dev branch
   - Semantic versioning
   - Docker reproducible build
   - Security scan
@@ -7,14 +7,11 @@ description: |
   - Reporting
 
 inputs:
-  module:
-    description: "Module / Microservice in monorepo"
+  image:
+    description: "Docker Image repo name"
     required: true
   version:
     description: "Target semantic version"
-    required: true
-  image:
-    description: "Docker Image name"
     required: true
 
 runs:
@@ -22,10 +19,12 @@ runs:
   steps:
     # ==========================================================
     # 🧭 STEP 1: Checkout repository
-    # Retrieves the repository code for branching and building operations.
+    # Retrieves the repository code for tagging and building operations.
     # ==========================================================
     - name: 🧩 Checkout Source Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # required to create and push tags
 
     # ==========================================================
     # 🧾 STEP 2: Validate version format
@@ -41,37 +40,54 @@ runs:
         echo "✅ Version format OK: ${{ inputs.version }}"
 
     # ==========================================================
-    # 🌿 STEP 3: Auto-create release branch
-    # Checks if a release branch already exists. If not, creates a new branch
-    # from the dev branch using the naming convention:
-    #     release/<module>-<version>
+    # 🌿 STEP 3: Ensure release branch exists
+    # If the release/<image> branch does not exist, create it from main.
     # ==========================================================
-    - name: 🌿 Create Release Branch
+    - name: 🌿 Ensure Release Branch
       id: branch
       shell: bash
       run: |
-        BRANCH="release/${{ inputs.module }}-${{ inputs.version }}"
-        mkdir -p .release-log
-        LOG=".release-log/branch-check.log"
-        echo "🔍 Checking if branch '$BRANCH' exists on remote..." | tee -a "$LOG"
-        git fetch origin --quiet
-        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-          echo "❌ Branch already exists: $BRANCH" | tee -a "$LOG"
-          echo "exists=true" >> $GITHUB_OUTPUT
-          exit 1
+        RELEASE_BRANCH="release/${{ inputs.image }}"
+        git fetch origin "$RELEASE_BRANCH" --quiet || true
+        if git rev-parse --verify "origin/$RELEASE_BRANCH" >/dev/null 2>&1; then
+          echo "✅ Found existing branch: $RELEASE_BRANCH"
         else
-          echo "🆕 Branch does not exist. Creating new branch: $BRANCH" | tee -a "$LOG"
-          git checkout -B dev origin/dev
-          git checkout -b "$BRANCH"
-          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "🆕 Creating new branch: $RELEASE_BRANCH"
+          git checkout -b "$RELEASE_BRANCH" origin/dev
+          git push origin "$RELEASE_BRANCH"
         fi
-        git config user.name "${GITHUB_ACTOR}"
-        git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-        echo "📝 Release branch created for ${{ inputs.module }} ${{ inputs.version }}" | tee -a "$LOG"
-        git push origin "$BRANCH"
+        echo "branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
 
     # ==========================================================
-    # 🐳 STEP 4: Build Docker image
+    # 🏷️ STEP 4: Auto-create Git Tag
+    # Automatically creates and pushes a semantic version tag to remote.
+    # Used for scheduled or manual releases without human intervention.
+    # ==========================================================
+    - name: 🏷️ Create Git Tag
+      id: tag
+      shell: bash
+      run: |
+        TAG="v${{ inputs.version }}"
+        BRANCH="${{ steps.branch.outputs.branch }}"
+        mkdir -p .release-log
+        LOG=".release-log/tag-create.log"
+        echo "🔍 Checking if tag '$TAG' exists..." | tee -a "$LOG"
+        git fetch origin --tags --quiet
+        if git rev-parse "$TAG" >/dev/null 2>&1; then
+          echo "❌ Tag already exists: $TAG" | tee -a "$LOG"
+          echo "exists=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git checkout "$BRANCH"
+        git tag -a "$TAG" -m "Automated release $TAG for ${{ inputs.image }}"
+        git push origin "$TAG"
+        echo "✅ Created and pushed tag: $TAG on $BRANCH" | tee -a "$LOG"
+        echo "exists=false" >> $GITHUB_OUTPUT
+
+    # ==========================================================
+    # 🐳 STEP 5: Build Docker image
     # Builds the Docker image for the target module with caching enabled.
     # Produces a deterministic tag: ghcr.io/<owner>/<image>:<version>.
     # ==========================================================
@@ -83,12 +99,12 @@ runs:
         docker build \
           --cache-from="$IMAGE" \
           -t "$IMAGE" \
-          -f ${{ inputs.module }}/Dockerfile \
-          ${{ inputs.module }}
+          -f ${{ inputs.image }}/Dockerfile \
+          ${{ inputs.image }}
         echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
     # ==========================================================
-    # 🧬 STEP 5: Verify reproducible build
+    # 🧬 STEP 6: Verify reproducible build
     # Rebuilds the same Docker image twice and compares their SHA IDs.
     # Ensures build reproducibility and consistency across environments.
     # ==========================================================
@@ -99,8 +115,8 @@ runs:
         HASH1=$(docker inspect --format='{{.Id}}' "$IMAGE")
         docker build \
           -t "$IMAGE-test" \
-          -f ${{ inputs.module }}/Dockerfile \
-          ${{ inputs.module }}
+          -f ${{ inputs.image }}/Dockerfile \
+          ${{ inputs.image }}
         HASH2=$(docker inspect --format='{{.Id}}' "$IMAGE-test")
         if [[ "$HASH1" != "$HASH2" ]]; then
           echo "❌ Non-deterministic build detected!"
@@ -109,7 +125,7 @@ runs:
         echo "✅ Reproducible build confirmed"
 
     # ==========================================================
-    # 🧰 STEP 6: Initialize CodeQL (SAST)
+    # 🧰 STEP 7: Initialize CodeQL (SAST)
     # Sets up GitHub CodeQL for static application security testing.
     # ==========================================================
     - name: 🧰 Initialize CodeQL
@@ -119,7 +135,7 @@ runs:
         languages: java
 
     # ==========================================================
-    # 🧪 STEP 7: Run CodeQL analysis
+    # 🧪 STEP 8: Run CodeQL analysis
     # Executes static analysis to identify vulnerabilities in source code.
     # ==========================================================
     - name: 🔬 Analyze with CodeQL
@@ -127,7 +143,7 @@ runs:
       uses: github/codeql-action/analyze@v3
 
     # ==========================================================
-    # 🛡️ STEP 8: Container vulnerability scan
+    # 🛡️ STEP 9: Container vulnerability scan
     # Scans the built Docker image using Trivy to detect OS and library issues.
     # The pipeline fails on HIGH or CRITICAL findings.
     # ==========================================================
@@ -141,13 +157,13 @@ runs:
         exit-code: 1
 
     # ==========================================================
-    # 📊 STEP 9: Upload release log artifacts
-    # Publishes the release logs and branching info as a downloadable artifact
+    # 📊 STEP 10: Upload release log artifacts
+    # Publishes the release logs and tagging info as a downloadable artifact
     # for manual review and audit tracking.
     # ==========================================================
     - name: 📤 Upload Release Report
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: release-report-${{ inputs.module }}-${{ inputs.version }}
+        name: release-report-${{ inputs.image }}-${{ inputs.version }}
         path: .release-log/

@@ -9,79 +9,124 @@ on:
 jobs:
   detect-changes:
     # ==========================================================
-    # 🔍 JOB: Detect Changed Modules
-    # Purpose:
-    #   - Dynamically determines which modules in the repo were modified
-    #     in the latest push or pull request targeting the `dev` branch.
+    # 🔍 JOB: Detect Changed Modules (auto-discovery version)
     #
-    # Conditional Logic:
-    #   - The job only runs if the triggering actor is *not included* in
-    #     `vars.EXCLUDE_DEVELOP_ACTORS`, allowing certain accounts to bypass CI.
+    #   1) If changes include any root-level files (files with no '/'), treat
+    #      as a repository-wide change -> build ALL modules.
+    #
+    #   2) If changes live under <scope>/ but not under a specific module,
+    #      build all modules under that scope.
+    #
+    #   3) If changes live under <scope>/<module>/, only build that module.
     # ==========================================================
     if: >
       !contains(vars.EXCLUDE_DEVELOP_ACTORS, github.actor)
     runs-on: ubuntu-latest
-    # ==========================================================
-    # How it works:
-    #   1. Reads `vars.MODULE_IMAGE`, a JSON array describing all modules, e.g.:
-    #        [
-    #          {"module": "auth", "image": "auth-service"},
-    #          {"module": "payment", "image": "payment-service"}
-    #        ]
-    #
-    #   2. Generates a temporary `filters.yml` file mapping each module to its folder:
-    #        auth:
-    #          - auth/**
-    #        payment:
-    #          - payment/**
-    #
-    #   3. Uses the `dorny/paths-filter` action to detect which module paths changed
-    #      compared to the base branch (GitHub automatically provides the diff context).
-    #
-    #   4. If changes are found:
-    #        → Builds a partial matrix containing only those modules (faster CI).
-    #      If **no** changes are detected:
-    #        → Falls back to include all modules (full CI mode).
-    #
-    #   5. Exports this JSON matrix via `GITHUB_OUTPUT`, so the next job (`develop`)
-    #      can run each module’s CI pipeline independently in parallel.
-    # ==========================================================
     outputs:
       matrix: ${{ steps.prepare.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
 
-      - id: gen-filters
+      # ==========================================================
+      # 🧭 STEP 1: Discover all modules dynamically
+      #
+      #   - Uses `find` to locate files named `build.gradle*` at depth 2 (i.e. <scope>/<module>/build.gradle*).
+      #
+      #   - Normalizes paths to remove leading ./ and the build file suffix to produce lines like:
+      #       core/auth
+      #       infra/gateway
+      #
+      #   - Converts that list into a JSON array of objects:
+      #       [{ "scope": "core", "module": "auth" }, ...]
+      # ==========================================================
+      - id: discover
         run: |
-          echo "filters:" > filters.yml
-          jq -r '.[] | "  \(.module):\n    - \(.module)/**"' <<< '${{ vars.MODULE_IMAGE }}' >> filters.yml
-          echo "::notice::Generated filters.yml:"
-          cat filters.yml
+          echo "🔍 Scanning repo for modules..."
+          find . -mindepth 2 -maxdepth 2 -type f -name "build.gradle*" \
+            | sed 's|^\./||; s|/build.gradle.*||' \
+            | sort > /tmp/all_modules.txt
+          jq -R -s -c 'split("\n")[:-1] | map(split("/")) | map({scope:.[0], module:.[1]})' /tmp/all_modules.txt > /tmp/all_modules.json
+          echo "::notice::Discovered modules:"
+          cat /tmp/all_modules.json | jq .
+          echo "all_modules=$(cat /tmp/all_modules.json)" >> $GITHUB_OUTPUT
 
-      - id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          list-files: json
-          filters: ${{ hashFiles('filters.yml') }}
-          filters-file: filters.yml
+      # ==========================================================
+      # 🧮 STEP 2: Determine what changed in this push/PR
+      #
+      #   - Computes a base commit using `git merge-base origin/dev HEAD`.
+      #
+      #   - If no base exists (first commit, shallow clone or other edge cases), assume root-level change.
+      #
+      #   - Otherwise, lists changed files (one-per-line) and writes them to /tmp/changed.txt.
+      #
+      #   - Detects if any changed path is root-level (no slashes).
+      # ==========================================================
+      - id: detect
+        run: |
+          base=$(git merge-base origin/dev HEAD || echo "")
+          if [[ -z "$base" ]]; then
+            echo "::warning::No base branch found → assuming full build"
+            echo "level=root" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          git diff --name-only "$base" HEAD > /tmp/changed.txt
+          echo "::notice::Changed files:"
+          sed 's/^/  - /' /tmp/changed.txt || true
+          if grep -qE '^[^/]+$' /tmp/changed.txt; then
+            echo "level=root" >> $GITHUB_OUTPUT
+            echo "::warning::Root-level change detected → full CI mode"
+          else
+            echo "level=module" >> $GITHUB_OUTPUT
+          fi
 
+      # ==========================================================
+      # 🧠 STEP 3: Compute affected scope/module matrix
+      #
+      #   - If level == root: matrix = all discovered modules (full build).
+      #
+      #   - Else:
+      #       * Extract the unique changed scopes (first path segment).
+      #       * Extract the unique changed scope/module paths (first two segments).
+      #       * Select all discovered modules where:
+      #           - the module's scope is in changed scopes, OR
+      #           - the module's scope/module pair is explicitly changed.
+      # ==========================================================
       - id: prepare
         run: |
-          echo "::notice::Detected changes: ${{ steps.filter.outputs.changes }}"
-          if [[ "${{ steps.filter.outputs.changes }}" != "[]" && -n "${{ steps.filter.outputs.changes }}" ]]; then
-            echo "::notice::Partial CI mode for modules: ${{ steps.filter.outputs.changes }}"
-            modules='${{ steps.filter.outputs.changes }}'
+          level="${{ steps.detect.outputs.level }}"
+          all=$(cat /tmp/all_modules.json)
+          if [[ "$level" == "root" ]]; then
+            echo "::notice::Root-level change → use full matrix"
+            matrix="$all"
           else
-            echo "::warning::No specific module changed → full CI triggered"
-            modules=$(jq -c '[.[] | {module: .module}]' <<< '${{ vars.MODULE_IMAGE }}')
+            echo "::notice::Analyzing changed scopes/modules..."
+            awk -F'/' '{print $1}' /tmp/changed.txt | sort -u > /tmp/scopes.txt
+            awk -F'/' '{print $1"/"$2}' /tmp/changed.txt | sort -u > /tmp/paths.txt
+            matrix=$(jq -c \
+              --argjson all "$all" \
+              --argjson scopes "$(jq -R -s 'split("\n")[:-1]' < /tmp/scopes.txt)" \
+              --argjson mods "$(jq -R -s 'split("\n")[:-1]' < /tmp/paths.txt)" '
+              [ $all[] | select(
+                  ($scopes | index(.scope))
+                  or
+                  ($mods | index((.scope + "/" + .module)))
+                ) ]')
+            if [[ "$(jq length <<< "$matrix")" -eq 0 ]]; then
+              echo "::warning::No module match found → full build"
+              matrix="$all"
+            fi
           fi
-          echo "matrix=$modules" >> $GITHUB_OUTPUT
-          echo "::notice::Matrix prepared → $modules"
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          echo "::notice::Final build matrix:"
+          echo "$matrix" | jq .
 
+      # ==========================================================
+      # 🧹 STEP 4: Cleanup
+      # ==========================================================
       - if: always()
         run: |
-          rm -f filters.yml
-          echo "::notice::Cleaned up temporary filters.yml"
+          rm -f /tmp/*.txt /tmp/*.json || true
+          echo "::notice::Temporary files cleaned."
 
   develop:
     needs: detect-changes
@@ -91,6 +136,9 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/develop
         with:
+          scope: ${{ matrix.scope }}
           module: ${{ matrix.module }}

@@ -1,22 +1,12 @@
 description: |
-  - Branch validation (only release/* allowed)
+  - Tag validation (only image-version tags like <image>-vX.Y.Z allowed)
   - Docker image build and tagging
   - Image push to target registry
   - Security scan using Trivy
   - Report generation and artifact upload
   - Slack notification for delivery completion
-  - Cleanup of the release branch
 
 inputs:
-  module:
-    required: true
-    description: "Relative path to the service or module directory containing the Dockerfile."
-  image:
-    required: true
-    description: "Logical name of the Docker image to be built (without registry prefix)."
-  version:
-    required: true
-    description: "Version tag assigned to the built image (e.g., 'v1.0.0' or commit SHA)."
   docker_user:
     required: true
     description: "Username or service account used to authenticate to the Docker registry."
@@ -29,9 +19,6 @@ inputs:
   slack:
     required: true
     description: "Incoming Slack Webhook URL used to send delivery status notifications."
-  pat:
-    required: true
-    description: "GitHub Personal Access Token (PAT) used for authenticated branch cleanup operations."
 
 runs:
   using: composite
@@ -44,116 +31,95 @@ runs:
       uses: actions/checkout@v4
 
     # ==========================================================
-    # 🧾 STEP 2: Validate branch
-    # Ensures that only release branches (release/*) can trigger
-    # the delivery pipeline to prevent accidental deployments.
+    # 🧾 STEP 2: Validate and Parse
+    # Ensures that only properly formatted tags (e.g. auth-service-v1.2.3)
+    # can trigger the delivery pipeline.
     # ==========================================================
-    - name: 🔍 Validate Release Branch
+    - name: 🔍 Validate Branch & Parse Tag
+      id: parse
       shell: bash
       run: |
-        BRANCH="${GITHUB_REF#refs/heads/}"
-        if [[ ! "$BRANCH" =~ ^(release/.*)$ ]]; then
+        BRANCH="${GITHUB_REF_NAME}"
+        TAG="${GITHUB_REF#refs/tags/}"
+        if [[ ! "$BRANCH" =~ ^release/ ]]; then
           echo "❌ Branch '$BRANCH' is NOT ALLOWED for CD (Delivery)."
           exit 1
         fi
+        IMAGE="${BRANCH#release/}"
+        if [[ -z "$TAG" ]]; then
+          echo "❌ Missing tag version (expected from Git tag trigger)."
+          exit 1
+        fi
+        VERSION="${TAG#v}"
         echo "✅ Branch validation passed for $BRANCH"
+        echo "🔹 Extracted IMAGE: $IMAGE"
+        echo "🔹 Extracted VERSION: $VERSION"
+        echo "image=$IMAGE" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
 
     # ==========================================================
     # 🏗️ STEP 3: Build Docker image
-    # Builds the Docker image from the provided module directory.
-    # Tags the image using the specified registry, image name, and version.
+    # Builds the Docker image using its module directory.
     # ==========================================================
     - name: 🏗️ Build Docker Image
       shell: bash
       run: |
-        IMAGE="${{ inputs.docker_repo }}/${{ inputs.image }}:${{ inputs.version }}"
-        echo "Building image: $IMAGE"
-        docker build -t "$IMAGE" -f "${{ inputs.module }}/Dockerfile" "${{ inputs.module }}"
-        echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+        IMAGE_NAME="${{ inputs.docker_repo }}/${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}"
+        PATH_DIR="${{ steps.parse.outputs.image }}"
+        echo "Building image: $IMAGE_NAME"
+        docker build -t "$IMAGE_NAME" -f "$PATH_DIR/Dockerfile" "$PATH_DIR"
+        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
     # ==========================================================
     # 🚀 STEP 4: Push Docker image
-    # Authenticates to the registry using provided credentials
-    # and pushes the built image to the specified repository.
+    # Authenticates and pushes the image to the target registry.
     # ==========================================================
     - name: 🚀 Push Docker Image
       shell: bash
       run: |
         echo "${{ inputs.docker_token }}" | docker login -u "${{ inputs.docker_user }}" --password-stdin
-        docker push "$IMAGE"
+        docker push "$IMAGE_NAME"
 
     # ==========================================================
-    # 🧠 STEP 5: Scan Docker image vulnerabilities
-    # Uses Trivy to scan the pushed Docker image for known
-    # security vulnerabilities. Fails on HIGH or CRITICAL issues.
+    # 🛡️ STEP 5: Scan Docker image vulnerabilities
     # ==========================================================
     - name: 🛡️ Scan Docker Image (Trivy)
       uses: aquasecurity/trivy-action@0.20.0
       with:
-        image-ref: ${{ env.IMAGE }}
+        image-ref: ${{ env.IMAGE_NAME }}
         severity: HIGH,CRITICAL
         ignore-unfixed: true
         exit-code: 1
 
     # ==========================================================
     # 🧾 STEP 6: Generate build report
-    # Captures the image digest and creates a delivery report file
-    # summarizing the completed build and digest info.
     # ==========================================================
     - name: 🧾 Generate Delivery Report
       shell: bash
       run: |
-        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_NAME")
         echo "DIGEST=$DIGEST" >> $GITHUB_ENV
-        echo "✅ Build completed for $IMAGE" > report.txt
+        echo "✅ Build completed for $IMAGE_NAME" > report.txt
         echo "🔑 Digest: $DIGEST" >> report.txt
 
     # ==========================================================
     # 📦 STEP 7: Upload delivery artifacts
-    # Uploads the generated report file as a build artifact
-    # for traceability and post-deployment validation.
     # ==========================================================
     - name: 📤 Upload Delivery Report
       uses: actions/upload-artifact@v4
       with:
-        name: release-report-${{ inputs.module }}-${{ inputs.version }}
+        name: release-report-${{ steps.parse.outputs.image }}-${{ steps.parse.outputs.version }}
         path: report.txt
 
     # ==========================================================
     # 📣 STEP 8: Notify Slack channel
-    # Sends a success notification to Slack via incoming webhook
-    # to inform the team that the delivery pipeline has completed.
     # ==========================================================
     - name: 📣 Notify Slack (Delivery Complete)
       shell: bash
       env:
         WEBHOOK_URL: ${{ inputs.slack }}
       run: |
-        MESSAGE="✅ CD Delivery completed successfully for branch: $GITHUB_REF_NAME"
+        MESSAGE="✅ CD Delivery completed successfully for tag: $GITHUB_REF_NAME"
+        MESSAGE="$MESSAGE\n📦 Image: ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}"
         curl -X POST -H "Content-Type: application/json" \
           --data "{\"text\":\"$MESSAGE\"}" $WEBHOOK_URL
-
-    # ==========================================================
-    # 🧹 STEP 9: Delete temporary release branch
-    # Cleans up by deleting the source branch after successful delivery.
-    # Uses the provided GitHub PAT for authentication.
-    # ==========================================================
-    - name: 🧹 Delete Release Branch
-      shell: bash
-      env:
-        PAT: ${{ inputs.pat }}
-        REPO_OWNER: ${{ github.repository_owner }}
-        REPO_NAME: ${{ github.repository }}
-        BRANCH: ${{ github.head_ref }}
-      run: |
-        set -euo pipefail
-        if [[ -z "$BRANCH" ]]; then
-          echo "No branch to delete. Exiting."
-          exit 0
-        fi
-        echo "Deleting protected branch: $BRANCH from repo $REPO_NAME"
-        curl -s -X DELETE \
-          -H "Authorization: token $PAT" \
-          -H "Accept: application/vnd.github+json" \
-          "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/git/refs/heads/$BRANCH"
-        echo "✅ Branch $BRANCH deletion request sent"

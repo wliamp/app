@@ -1,29 +1,8 @@
 rootProject.name = 'root'
 
-include 'shop', 'shop:merc',
-    'pay', 'pay:gtw', 'pay:pro', 'pay:net',
-    'bank', 'bank:iss', 'bank:aqr',
-    'cs', 'cs:pay',
-    'fr', 'fr:pay',
-    'cr', 'cr:pay'
-
-project(':shop').projectDir = file('shopping')
-project(':shop:merc').projectDir = file('shopping/merchant')
-
-project(':pay').projectDir = file('payment')
-project(':pay:gtw').projectDir  = file('payment/gateway')
-project(':pay:pro').projectDir  = file('payment/processor')
-project(':pay:net').projectDir  = file('payment/card-network')
-
-project(':bank').projectDir = file('banking')
-project(':bank:iss').projectDir  = file('banking/issuer')
-project(':bank:aqr').projectDir  = file('banking/acquirer')
-
-project(':cs').projectDir = file('clearing-settlement')
-project(':cs:pay').projectDir   = file('clearing-settlement/payment')
-
-project(':fr').projectDir = file('fraud-risk')
-project(':fr:pay').projectDir   = file('fraud-risk/payment')
-
-project(':cr').projectDir  = file('compliance-regulatory')
-project(':cr:pay').projectDir  = file('compliance-regulatory/payment')
+include 'shopping', 'shopping:merchant',
+    'payment', 'payment:gateway', 'payment:processor', 'payment:card-network',
+    'banking', 'banking:issuer', 'banking:acquirer',
+    'clearing-settlement', 'clearing-settlement:payment',
+    'fraud-risk', 'fraud-risk:payment',
+    'compliance-regulatory', 'compliance-regulatory:payment'

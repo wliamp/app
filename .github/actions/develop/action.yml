@@ -8,8 +8,11 @@ description: |
   - Image pre-build & vulnerability scan
 
 inputs:
+  scope:
+    description: "Gradle Task tier 1"
+    required: true
   module:
-    description: "Module / Microservice in Spring Boot multi Gradle project"
+    description: "Gradle Task tier 2 (belong to 'scope')"
     required: true
 
 runs:
@@ -69,7 +72,7 @@ runs:
     # ==========================================================
     - name: 🧠 Static Code Analysis
       shell: bash
-      run: ./gradlew :${{ inputs.module }}:check
+      run: ./gradlew :${{ inputs.scope }}:${{ inputs.module }}:check
 
     # ==========================================================
     # 🛡️ STEP 6: Dependency vulnerability scan
@@ -79,7 +82,7 @@ runs:
     - name: 🧩 Dependency Security Scan
       uses: anchore/scan-action@v4
       with:
-        path: .
+        path: ./${{ inputs.scope }}/${{ inputs.module }}
         fail-build: true
         severity-cutoff: high
 
@@ -91,7 +94,7 @@ runs:
       shell: bash
       env:
         SPRING_PROFILES_ACTIVE: test
-      run: ./gradlew :${{ inputs.module }}:clean build jacocoTestReport
+      run: ./gradlew :${{ inputs.scope }}:${{ inputs.module }}:clean build jacocoTestReport
 
     # ==========================================================
     # 📊 STEP 8: Upload test report artifact
@@ -100,8 +103,8 @@ runs:
     - name: 📤 Upload Test Report
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.module }}-test-report
-        path: ${{ inputs.module }}/build/reports/tests/test
+        name: ${{ inputs.scope }}-${{ inputs.module }}-test-report
+        path: ${{ inputs.scope }}/${{ inputs.module }}/build/reports/tests/test
 
     # ==========================================================
     # 📈 STEP 9: Upload code coverage report
@@ -110,8 +113,8 @@ runs:
     - name: 📤 Upload Coverage Report
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.module }}-coverage-report
-        path: ${{ inputs.module }}/build/reports/jacoco/test/html
+        name: ${{ inputs.scope }}-${{ inputs.module }}-coverage-report
+        path: ${{ inputs.scope }}/${{ inputs.module }}/build/reports/jacoco/test/html
 
     # ==========================================================
     # 🔄 STEP 10: Aggregate validation
@@ -137,9 +140,9 @@ runs:
       run: |
         docker build \
           --target build \
-          -t ci-${{ inputs.module }}:prebuild \
-          -f ${{ inputs.module }}/Dockerfile \
-          ${{ inputs.module }}
+          -t ci-${{ inputs.scope }}-${{ inputs.module }}:prebuild \
+          -f ${{ inputs.scope }}/${{ inputs.module }}/Dockerfile \
+          ${{ inputs.scope }}/${{ inputs.module }}
 
     # ==========================================================
     # 🔬 STEP 12: Container image vulnerability scan
@@ -149,7 +152,7 @@ runs:
     - name: 🔬 Scan Docker Image (Trivy)
       uses: aquasecurity/trivy-action@0.20.0
       with:
-        image-ref: ci-${{ inputs.module }}:prebuild
+        image-ref: ci-${{ inputs.scope }}-${{ inputs.module }}:prebuild
         severity: HIGH,CRITICAL
         ignore-unfixed: true
         exit-code: 1

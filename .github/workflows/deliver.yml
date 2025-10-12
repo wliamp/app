@@ -7,71 +7,14 @@ on:
     branches: [ main ]
 
 jobs:
-  define-matrix:
-    # ==========================================================
-    # 🧩 JOB: Define Delivery Matrix
-    # Purpose:
-    #   - Dynamically constructs a build matrix for CD Delivery pipeline.
-    #
-    # Conditional Logic:
-    #   - The job runs **only** if the triggering GitHub actor is *not included* in
-    #     `vars.EXCLUDE_DELIVERY_ACTORS` — allowing fine-grained delivery restrictions.
-    # ==========================================================
-    if: >
-      !contains(vars.EXCLUDE_DELIVERY_ACTORS, github.actor)
-    runs-on: ubuntu-latest
-    # ==========================================================
-    # How it works:
-    #   1. Reads `vars.MODULE_IMAGE`, which is expected to be a JSON array like:
-    #        [
-    #          {"module": "auth", "image": "auth-service"},
-    #          {"module": "payment", "image": "payment-service"}
-    #        ]
-    #
-    #   2. Generates a unique version tag using the current date + short commit SHA.
-    #        e.g., "20251007-ab12cd3"
-    #
-    #   3. Iterates through the list, producing an array of objects in the form:
-    #        [
-    #          {"module":"auth","image":"auth-service","version":"20251007-ab12cd3"},
-    #          {"module":"payment","image":"payment-service","version":"20251007-ab12cd3"}
-    #        ]
-    #
-    #   4. Exports this array as JSON to the job output (`matrix`), which is then
-    #      consumed by the downstream `delivery` job to execute each deployment in parallel.
-    # ==========================================================
-    outputs:
-      matrix: ${{ steps.set.outputs.matrix }}
-    steps:
-      - id: set
-        run: |
-          module_map='${{ vars.MODULE_IMAGE }}'
-          versions='[]'
-          tag="$(date +'%Y%m%d')-${GITHUB_SHA::7}"
-          count=$(jq 'length' <<< "$module_map")
-          for ((i=0; i<$count; i++)); do
-            module=$(jq -r ".[$i].module" <<< "$module_map")
-            image=$(jq -r ".[$i].image" <<< "$module_map")
-            versions=$(jq -c --arg m "$module" --arg i "$image" --arg v "$tag" \
-              '. + [{"module":$m,"image":$i,"version":$v}]' <<< "${versions:-[]}")
-          done
-          echo "matrix=$versions" >> $GITHUB_OUTPUT
-
-  delivery:
+  deliver:
     needs: define-matrix
     runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJSON(needs.define-matrix.outputs.matrix) }}
     steps:
       - uses: ./.github/actions/deliver
         with:
-          module: ${{ matrix.module }}
-          image: ${{ matrix.image }}
-          version: ${{ matrix.version }}
-
           docker_user: ${{ vars.DOCKERHUB_USER }}
           docker_repo: ${{ vars.DOCKERHUB_REPO }}
 
           docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
           slack: ${{ secrets.SLACK_WEBHOOK_URL }}
-          pat: ${{ secrets.PAT }}
