@@ -28,38 +28,39 @@ jobs:
             echo "❌ settings.gradle NOT FOUND"
             exit 1
           fi
-          root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\\(.*\\)['\"].*/\\1/")
+          root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\([^'\"]*\)['\"].*/\1/")
           echo '```mermaid' > structure.tmp
           echo 'mindmap' >> structure.tmp
           echo "  ${root_name:-root}" >> structure.tmp
           repo_url="https://github.com/${GITHUB_REPOSITORY}/tree/main"
-          grep -E '^include' "$settings_file" | grep -oE "'[^']+'" | tr -d "'" | while read module; do
-            [ -z "$module" ] && continue
-            IFS=':' read -r -a parts <<< "$module"
-            indent="  "
-            for i in "${!parts[@]}"; do
-              indent+="  "
-              part="${parts[$i]}"
-              path=$(IFS=/; echo "${parts[*]:0:$((i+1))}")
-              url="$repo_url/$path"
-              echo "${indent}[[$url|$part]]" >> structure.tmp
-            done
+          includes=$(grep -E '^\s*include' "$settings_file" | tr -d '\n' | sed "s/include//g" | sed "s/'//g" | sed "s/ //g" | sed "s/,/ /g")
+          for module in $includes; do
+              [ -z "$module" ] && continue
+              IFS=':' read -r -a parts <<< "$module"
+              indent="  "
+              for i in "${!parts[@]}"; do
+                  indent+="  "
+                  part="${parts[$i]}"
+                  path=$(IFS=/; echo "${parts[*]:0:$((i+1))}")
+                  url="$repo_url/$path"
+                  echo "${indent}[[$url|$part]]" >> structure.tmp
+              done
           done
           echo '```' >> structure.tmp
           start="<!-- START_STRUCTURE -->"
           end="<!-- END_STRUCTURE -->"
           content=$(cat structure.tmp)
           if [ ! -f README.md ]; then
-            echo "# Project Structure" > README.md
+              echo "# Project Structure" > README.md
           fi
           if grep -q "$start" README.md && grep -q "$end" README.md; then
-            awk -v s="$start" -v e="$end" -v r="$content" '
-              $0~s {print; print r; skip=1; next}
-              $0~e {skip=0}
-              !skip
-            ' README.md > README.tmp && mv README.tmp README.md
+              awk -v s="$start" -v e="$end" -v r="$content" '
+                  $0~s {print; print r; skip=1; next}
+                  $0~e {skip=0}
+                  !skip
+              ' README.md > README.tmp && mv README.tmp README.md
           else
-            echo -e "\n$start\n$content\n$end" >> README.md
+              echo -e "\n$start\n$content\n$end" >> README.md
           fi
 
       - name: Create branch and Pull Request
