@@ -10,7 +10,7 @@ on:
     paths: [ settings.gradle, settings.gradle.kts ]
 
 jobs:
-  gen-mindmap:
+  generate:
     if: >
       contains(vars.INCLUDE_OVERVIEW_ACTORS, github.actor)
     runs-on: ubuntu-latest
@@ -20,67 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate Mermaid mindmap from Gradle settings
-        run: |
-          settings_file=$(ls | grep -E "settings.gradle(\.kts)?$" || echo "")
-          if [ -z "$settings_file" ]; then
-            echo "❌ settings.gradle(.kts) NOT FOUND"
-            exit 1
-          fi
-          root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\([^'\"]*\)['\"].*/\1/")
-          echo '```mermaid' > structure.tmp
-          echo 'mindmap' >> structure.tmp
-          echo "  ${root_name:-root}" >> structure.tmp
-          repo_url="https://github.com/${GITHUB_REPOSITORY}/tree/main"
-          include_lines=$(awk '
-            /^\s*include/ {
-            gsub(/^\s*include\s*/, "");
-            line=$0;
-            next
-            }
-            /^\s+/ {line=line" "$0; next}
-            END {print line}
-          ' "$settings_file")
-          modules=$(echo "$include_lines" | tr ',' '\n' | sed "s/'//g" | sed 's/^[ \t]*//;s/[ \t]*$//')
-          declare -A added_paths  # tránh duplicate node
-          for module in $modules; do
-              [ -z "$module" ] && continue
-              IFS=':' read -r -a parts <<< "$module"
-              indent="  "
-              path_acc=""
-              for i in "${!parts[@]}"; do
-                  indent+="  "
-                  part="${parts[$i]}"
-                  if [ -z "$path_acc" ]; then
-                      path_acc="$part"
-                  else
-                      path_acc="$path_acc/$part"
-                  fi
-                  url="$repo_url/$path_acc"
-                  if [ -z "${added_paths[$path_acc]}" ]; then
-                      echo "${indent}[[$url|$part]]" >> structure.tmp
-                      added_paths[$path_acc]=1
-                  fi
-              done
-          done
-          echo '```' >> structure.tmp
-          start="<!-- START_STRUCTURE -->"
-          end="<!-- END_STRUCTURE -->"
-          content=$(cat structure.tmp)
-          if [ ! -f README.md ]; then
-              echo "# Project Structure" > README.md
-          fi
-          if grep -q "$start" README.md && grep -q "$end" README.md; then
-              awk -v s="$start" -v e="$end" -v r="$content" '
-                  $0~s {print; print r; skip=1; next}
-                  $0~e {skip=0}
-                  !skip
-              ' README.md > README.tmp && mv README.tmp README.md
-          else
-              echo -e "\n$start\n$content\n$end" >> README.md
-          fi
+      - name: Generate module structure tree
+        run: bash overview.sh
 
-      - name: Create branch and Pull Request
+      - name: Commit and push changes
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
@@ -89,11 +32,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b $branch
           git add README.md
-          git commit -m "docs(root): auto-update repo structure mindmap" || exit 0
+          git commit -m "docs(root): update module structure tree" || exit 0
           git push origin $branch
           gh pr create \
-            --title "docs(root): auto-update repo structure mindmap" \
-            --body "This PR updates the Gradle module structure mindmap in README.md." \
+            --title "docs(root): update module structure tree" \
+            --body "This PR updates the Gradle module structure in README.md." \
             --base main \
             --head $branch \
             || echo "PR already exists"
