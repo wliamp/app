@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -e
 settings_file=$(ls | grep -E "settings.gradle(\.kts)?$" || true)
 if [ -z "$settings_file" ]; then
   echo "❌ settings.gradle NOT FOUND"
@@ -10,42 +10,35 @@ tmpfile="structure.tmp"
 root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\\(.*\\)['\"].*/\\1/")
 root_name=${root_name:-root}
 echo "$root_name<br>" > "$tmpfile"
-includes=$(grep -E "include\s*\(" "$settings_file" | sed "s/.*include\s*(//;s/)//" | tr -d "'\"" | tr ',' ' ')
-modules=($includes)
-declare -A children
-for module in "${modules[@]}"; do
+includes=$(awk '
+  /^[[:space:]]*include[[:space:]]*\(/ {
+    match($0, /\(.*\)/)
+    args = substr($0, RSTART+1, RLENGTH-2)
+    gsub(/'\''|"/, "", args)
+    gsub(/,/, " ", args)
+    print args
+  }
+' "$settings_file" | tr '\n' ' ')
+if [ -z "$includes" ]; then
+  echo "⚠️ No modules found in $settings_file"
+  exit 0
+fi
+echo "$includes" | tr ' ' '\n' | while read -r module; do
+  [[ -z "$module" ]] && continue
   IFS=':' read -ra parts <<< "$module"
-  if ((${#parts[@]} == 1)); then
-    parent="__root__"
-    child="${parts[0]}"
-  else
-    parent="${parts[*]:0:${#parts[@]}-1}"
-    parent="${parent// /:}"
-    child="${parts[-1]}"
-  fi
-  children["$parent"]+="$child "
-done
-print_tree() {
-  local parent="$1"
-  local prefix="$2"
-  local list=(${children[$parent]:-})
-  local count=${#list[@]}
-
-  for ((i=0; i<count; i++)); do
-    local child="${list[$i]}"
-    local is_last=$((i == count - 1))
-    local branch="├─"
-    local new_prefix="${prefix}│&nbsp;&nbsp;"
-    if ((is_last)); then
-      branch="└─"
-      new_prefix="${prefix}&nbsp;&nbsp;&nbsp;&nbsp;"
-    fi
-    local display_path="${parent//:/\/}${parent:+/}${child}"
-    echo "${prefix}${branch} [${child}](./${display_path})<br>" >> "$tmpfile"
-    print_tree "${parent:+$parent:}$child" "$new_prefix"
+  depth=${#parts[@]}
+  indent=""
+  for ((i=1; i<depth; i++)); do
+    indent="${indent}&nbsp;&nbsp;&nbsp;&nbsp;"
   done
-}
-print_tree "__root__" ""
+  if (( depth == 1 )); then
+    echo "├─ [${parts[-1]}](./${parts[0]})<br>" >> "$tmpfile"
+  else
+    parent_path=$(IFS='/'; echo "${parts[*]:0:$((depth-1))}")
+    child="${parts[-1]}"
+    echo "${indent}└─ [${child}](./${parent_path}/${child})<br>" >> "$tmpfile"
+  fi
+done
 start="<!-- START_STRUCTURE -->"
 end="<!-- END_STRUCTURE -->"
 content=$(cat "$tmpfile")
