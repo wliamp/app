@@ -13,9 +13,9 @@ echo "$root_name<br>" > "$tmpfile"
 includes=$(awk '
   /include/ {
     line = $0
-    while (getline next) {
-      if (next ~ /^[[:space:]]*['"'"'[:alnum:]_:\\-,]+[[:space:]]*,?[[:space:]]*$/) {
-        line = line " " next
+    while (getline line2) {
+      if (line2 ~ /^[[:space:]]*['"'"'[:alnum:]_:\-,]+[[:space:]]*,?[[:space:]]*$/) {
+        line = line " " line2
       } else {
         break
       }
