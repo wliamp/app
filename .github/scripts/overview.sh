@@ -11,10 +11,14 @@ root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\\(.*\\
 root_name=${root_name:-root}
 echo "$root_name<br>" > "$tmpfile"
 includes=$(awk '
-  /include/ { collecting=1 }
-  collecting { line=line " " $0 }
-  /)$/ { collecting=0 }
-  END { gsub("include", "", line); print line }
+  /include/ {
+    line = $0
+    while (getline next && next ~ /^[[:space:]]*[[:alnum:]\047:,_-]/) {
+      line = line " " next
+    }
+    gsub(/include/, "", line)
+    print line
+  }
 ' "$settings_file")
 modules=$(echo "$includes" | tr -d "'" | tr ',' '\n' | sed '/^\s*$/d')
 declare -A tree
