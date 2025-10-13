@@ -19,26 +19,49 @@ includes=$(awk '
     print args
   }
 ' "$settings_file" | tr '\n' ' ')
+
 if [ -z "$includes" ]; then
   echo "⚠️ No modules found in $settings_file"
   exit 0
 fi
-echo "$includes" | tr ' ' '\n' | while read -r module; do
-  [[ -z "$module" ]] && continue
-  IFS=':' read -ra parts <<< "$module"
-  depth=${#parts[@]}
-  indent=""
-  for ((i=1; i<depth; i++)); do
-    indent="${indent}│&nbsp;&nbsp;&nbsp;&nbsp;"
-  done
-  if (( depth == 1 )); then
-    echo "├─ [${parts[-1]}](./${parts[0]})<br>" >> "$tmpfile"
-  else
-    parent_path=$(IFS='/'; echo "${parts[*]:0:$((depth-1))}")
-    child="${parts[-1]}"
-    echo "${indent}└─ [${child}](./${parent_path}/${child})<br>" >> "$tmpfile"
-    echo "│<br>" >> "$tmpfile"
+read -r -a modules <<< "$includes"
+top_levels=()
+seen_top=""
+for m in "${modules[@]}"; do
+  top="${m%%:*}"
+  if [[ "$seen_top" != *"|$top|"* ]]; then
+    top_levels+=("$top")
+    seen_top="${seen_top}|$top|"
   fi
+done
+for top in "${top_levels[@]}"; do
+  echo "├─ [${top}](./${top})<br>" >> "$tmpfile"
+  children=()
+  for m in "${modules[@]}"; do
+    if [[ "$m" == "$top" ]]; then
+      continue
+    fi
+    if [[ "$m" == $top:* ]]; then
+      child="${m##*:}"
+      children+=("$child|${m}")
+    fi
+  done
+  count=${#children[@]}
+  if (( count > 0 )); then
+    for ((i=0; i<count; i++)); do
+      pair="${children[$i]}"
+      child="${pair%%|*}"
+      fullpath="${pair#*|}"
+      is_last=$(( i == count - 1 ))
+      if (( is_last )); then
+        branch="└─"
+      else
+        branch="├─"
+      fi
+      echo "│&nbsp;&nbsp;&nbsp;&nbsp;${branch} [${child}](./${fullpath})<br>" >> "$tmpfile"
+    done
+  fi
+  echo "│<br>" >> "$tmpfile"
 done
 start="<!-- START_STRUCTURE -->"
 end="<!-- END_STRUCTURE -->"
