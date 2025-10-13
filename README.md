@@ -1,5 +1,11 @@
 ## 🔧 Repository Structure
 <!-- START_STRUCTURE -->
+```mermaid
+graph TD
+  root(root)
+  root --> 'shopping'
+  root --> 'shoppingmerchant'
+```
 <!-- END_STRUCTURE -->
 
 ---
