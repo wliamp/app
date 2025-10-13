@@ -1,50 +1,124 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x  # bật debug khi chạy
+
 echo "🏗️ Generating full repository overview..."
 
+# ---------- 1️⃣ Generate Mermaid folder/file structure ----------
 generate_structure() {
   echo "```mermaid"
   echo "graph TD"
-  echo "    A[📁 root]"
-  for scope in $(find . -mindepth 1 -maxdepth 1 -type d ! -path './.*' | sort); do
-    scope_name=$(basename "$scope")
-    sid="S_${scope_name//[-]/_}"
-    echo "    A --> $sid[📁 $scope_name]"
-    for module in $(find "$scope" -mindepth 1 -maxdepth 1 -type d ! -path '*/.*' | sort); do
-      module_name=$(basename "$module")
-      mid="M_${scope_name//[-]/_}_${module_name//[-]/_}"
-      echo "    $sid --> $mid[📦 $module_name]"
-      echo "    click $mid \"$scope_name/$module_name\" \"🔗 open\""
+  echo "  A[📁 root]"
+  id_counter=0
+
+  traverse() {
+    local path=$1
+    local parent_id=$2
+    for item in "$path"/*; do
+      [[ -e "$item" ]] || continue
+      id_counter=$((id_counter+1))
+      local node_id="N$id_counter"
+      local name=$(basename "$item")
+      if [[ -d "$item" ]]; then
+        echo "  $parent_id --> $node_id[📁 $name]"
+        traverse "$item" "$node_id"
+      else
+        echo "  $parent_id --> $node_id[📄 $name]"
+      fi
     done
-    echo "    click $sid \"$scope_name\" \"🔗 open\""
-  done
+  }
+
+  traverse "." "A"
   echo "```"
 }
 
+# ---------- 2️⃣ Generate Ruleset from GitHub branch protection ----------
 generate_ruleset() {
-  echo "### ⚙️ Detected Rules and Configurations"
+  echo "### 🛡 Branch Protection Rules (from GitHub API)"
   echo ""
-  [[ -f ".editorconfig" ]] && echo "- 🧩 **EditorConfig** detected"
-  [[ -f ".ruleset.yml" ]] && echo "- 🛡️ **Code Ruleset** configured in \`.ruleset.yml\`"
-  [[ -f "build.gradle" ]] && echo "- 🧱 **Gradle project root**"
-  [[ -d ".github/actions" ]] && echo "- 🔧 **Custom GitHub Actions** found in \`.github/actions\`"
-  [[ -f "settings.gradle" ]] && echo "- ⚙️ **Multi-module Gradle project** setup"
+
+  python3 <<'EOF'
+import os, requests
+
+repo_full = os.environ['GITHUB_REPOSITORY']
+token = os.environ['GITHUB_TOKEN']
+headers = {"Authorization": f"token {token}"}
+
+branches_url = f"https://api.github.com/repos/{repo_full}/branches"
+branches_resp = requests.get(branches_url, headers=headers)
+branches = [b['name'] for b in branches_resp.json()]
+
+for branch in branches:
+    url = f"https://api.github.com/repos/{repo_full}/branches/{branch}/protection"
+    r = requests.get(url, headers=headers)
+    if r.status_code != 200:
+        continue
+    data = r.json()
+    print(f"#### Branch `{branch}`")
+    admins = data.get("enforce_admins", {}).get("enabled", False)
+    print(f"- 🔒 Enforce admins: {admins}")
+    restrictions = data.get("restrictions", None)
+    if restrictions:
+        users = [u['login'] for u in restrictions.get("users", [])]
+        teams = [t['name'] for t in restrictions.get("teams", [])]
+        print(f"- 👥 Restrictions: users={users}, teams={teams}")
+    rsc = data.get("required_status_checks", {})
+    if rsc:
+        contexts = rsc.get("contexts", [])
+        strict = rsc.get("strict", False)
+        print(f"- ✅ Status checks required: {contexts}, strict={strict}")
+    pr = data.get("required_pull_request_reviews", {})
+    if pr:
+        print(f"- 🔄 Pull request reviews:")
+        print(f"    - dismiss stale reviews: {pr.get('dismiss_stale_reviews', False)}")
+        print(f"    - require code owner reviews: {pr.get('require_code_owner_reviews', False)}")
+EOF
+
   echo ""
 }
 
-generate_workflows() {
-  echo "### 🚀 CI/CD Workflows"
-  for wf in .github/workflows/*.yml; do
-    [[ -f "$wf" ]] || continue
-    name=$(grep -m1 '^name:' "$wf" | cut -d':' -f2- | xargs)
-    triggers=$(grep -E '^(on:|  push:|  pull_request:|  workflow_dispatch:|  schedule:)' "$wf" | sed 's/^/    /')
-    echo "- **$name**"
-    echo "  \`\`\`yaml"
-    echo "$triggers"
-    echo "  \`\`\`"
+# ---------- 3️⃣ Generate text-based explanation of all .yml in .github/ ----------
+generate_all_yml() {
+  echo "### 📄 All GitHub YAML Configs (.github/)"
+  echo ""
+
+  for yml in $(find .github -type f -name "*.yml"); do
+    [[ -f "$yml" ]] || continue
+
+    python3 <<EOF
+import yaml
+yml_file = "$yml"
+with open(yml_file) as f:
+    try:
+        data = yaml.safe_load(f)
+    except Exception as e:
+        print(f"- {yml_file}: could not parse YAML ({e})")
+        exit(0)
+
+name = data.get("name", yml_file)
+print(f"- **File:** {yml_file} / **Name:** {name}")
+
+# triggers
+triggers = data.get("on", None)
+print(f"  - Triggered on: {triggers}")
+
+# jobs
+jobs = data.get("jobs", {})
+for jname, job in jobs.items():
+    runs_on = job.get("runs-on","unknown")
+    print(f"  - Job: {jname} (runs on {runs_on})")
+    for step in job.get("steps", []):
+        if "run" in step:
+            cmd = step["run"].replace('\n','; ')
+            print(f"      * Step: run → {cmd}")
+        elif "uses" in step:
+            print(f"      * Step: uses → {step['uses']}")
+print()
+EOF
   done
 }
 
+# ---------- 4️⃣ Update README sections ----------
 update_section() {
   local start_tag=$1
   local end_tag=$2
@@ -57,12 +131,12 @@ update_section() {
   ' README.md > tmp && mv tmp README.md
 }
 
-# Generate temporary content files
+# ---------- Generate temporary content ----------
 generate_structure > structure.tmp
 generate_ruleset > ruleset.tmp
-generate_workflows > workflows.tmp
+generate_all_yml > workflows.tmp
 
-# Update README sections
+# ---------- Update README ----------
 update_section STRUCTURE_START STRUCTURE_END structure.tmp
 update_section RULESET_START RULESET_END ruleset.tmp
 update_section WORKFLOWS_START WORKFLOWS_END workflows.tmp
