@@ -1,8 +1,8 @@
 rootProject.name = 'root'
 
-include 'shopping', 'shopping:merchant',
-    'payment', 'payment:gateway', 'payment:processor', 'payment:card-network',
-    'banking', 'banking:issuer', 'banking:acquirer',
-    'clearing-settlement', 'clearing-settlement:payment',
-    'fraud-risk', 'fraud-risk:payment',
-    'compliance-regulatory', 'compliance-regulatory:payment'
+include('shopping', 'shopping:merchant')
+include('payment', 'payment:gateway', 'payment:processor', 'payment:card-network')
+include('banking', 'banking:issuer', 'banking:acquirer')
+include('clearing-settlement', 'clearing-settlement:payment')
+include('fraud-risk', 'fraud-risk:payment')
+include('compliance-regulatory', 'compliance-regulatory:payment')
