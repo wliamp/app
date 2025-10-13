@@ -11,15 +11,13 @@ root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\\(.*\\
 root_name=${root_name:-root}
 echo "$root_name<br>" > "$tmpfile"
 includes=$(awk '
-  BEGIN { in_block=0 }
+  BEGIN { capture=0 }
   /include/ {
-    in_block=1
-    line=$0
-    next
+    capture=1
   }
-  in_block {
-    line=line " " $0
-    if ($0 ~ /\)/ || $0 ~ /$/) in_block=0
+  capture {
+    line = line " " $0
+    if ($0 !~ /,$/) capture=0
   }
   END {
     gsub(/include/, "", line)
