@@ -68,7 +68,7 @@ jobs:
           done
           echo "✅ Final version matrix:"
           echo "$versions" | jq .
-          echo "matrix=$versions" >> $GITHUB_OUTPUT
+          echo "matrix={\"include\":$versions}" >> $GITHUB_OUTPUT
 
   release:
     needs: resolve-version
