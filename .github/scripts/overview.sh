@@ -1,5 +1,6 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s extglob
 settings_file=$(ls | grep -E "settings.gradle(\.kts)?$" || true)
 if [ -z "$settings_file" ]; then
   echo "❌ settings.gradle NOT FOUND"
@@ -31,12 +32,14 @@ for module in $includes; do
     parent="${parent:+$parent:}${parts[i]}"
   done
   child="${parts[-1]}"
-  children_map["$parent"]+="$child "
+  key="${parent:-__root__}"
+  children_map["$key"]+="$child "
 done
 print_tree() {
   local prefix="$1"
   local parent="$2"
-  local children=(${children_map[$parent]})
+  local key="${parent:-__root__}"
+  local children=(${children_map[$key]:-})
   local count=${#children[@]}
   for ((i=0; i<count; i++)); do
     local child="${children[$i]}"
@@ -47,12 +50,12 @@ print_tree() {
       branch="└─"
       new_prefix="${prefix}&nbsp;&nbsp;&nbsp;&nbsp;"
     fi
-    local display_path="${parent//:/\/}/${parent:+/}${child}"
+    local display_path="${parent//:/\/}${parent:+/}${child}"
     echo "${prefix}${branch} [${child}](./${display_path})<br>" >> "$tmpfile"
     print_tree "$new_prefix" "${parent:+$parent:}$child"
   done
 }
-top_level=($(echo "$includes" | tr ' ' '\n' | awk -F':' '{print $1}' | sort -u))
+top_level=(${children_map[__root__]:-})
 count=${#top_level[@]}
 for ((i=0; i<count; i++)); do
   local mod="${top_level[$i]}"
