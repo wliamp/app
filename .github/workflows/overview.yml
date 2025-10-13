@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate module structure tree
-        run: bash overview.sh
+        run: bash .github/scripts/overview.sh
 
       - name: Commit and push changes
         env:
