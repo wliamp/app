@@ -1,22 +1,6 @@
-## 🔧 Modules
-
-- [🛍️ Merchant](./merc) – The business or service provider accepting payments. Submits payment requests, receives funds, and reconciles transactions.
-
-- [🔗 Payment Gateway](./gtw) –The interface between merchant and payment networks. Handles authorization requests, tokenization, and routing to the payment processor.
-
-- [⚙️ Payment Processor](./pro) – Executes transaction processing on behalf of the merchant or acquirer. Connects to card networks and forwards authorizations, captures, and settlement instructions.
-
-- [🌐 Card Network / Clearing House](./net) – Facilitates transaction routing between issuers and acquirers, ensures settlement, and enforces network rules and standards.
-
-- [💳 Issuer System / Bank](./iss) – The cardholder’s bank or financial institution. Authorizes or declines transactions based on account status and fraud rules.
-
-- [🏦 Acquirer System / Bank](./aqr) – The merchant’s bank or acquiring processor. Receives funds from issuers via card networks and deposits them to merchant accounts.
-
-- [💱 Clearing & Settlement Authority](./cs) – Ensures final settlement of funds between issuers and acquirers, reconciles transactions, and provides reporting for auditing purposes.
-
-- [🕵️ Fraud / Risk Provider](./fr) – Monitors transactions for suspicious activity, applies fraud detection rules, and may block or flag transactions before settlement.
-
-- [⚖️ Compliance / Regulatory Authority](./reg) – Oversees adherence to legal and regulatory standards, anti-money laundering (AML), and financial reporting obligations.
+## 🧭 Repository Structure
+<!--STRUCTURE_START-->
+<!--STRUCTURE_END-->
 
 ---
 
