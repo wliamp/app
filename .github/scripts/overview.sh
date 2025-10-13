@@ -12,12 +12,12 @@ root_name=${root_name:-root}
 echo "$root_name<br>" > "$tmpfile"
 includes=$(awk '
   BEGIN { capture=0 }
-  /include/ {
+  /^[[:space:]]*include[[:space:]]/ {
     capture=1
   }
   capture {
     line = line " " $0
-    if ($0 !~ /,$/) capture=0
+    if ($0 !~ /,|'\''/) capture=0
   }
   END {
     gsub(/include/, "", line)
