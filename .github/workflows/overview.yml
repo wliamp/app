@@ -32,7 +32,7 @@ jobs:
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           branch: auto/overview
           title: "Overview"
           body: |
