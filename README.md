@@ -116,6 +116,16 @@ chore(aqr): bump version 1.2.0
 <!--RULESET_START-->
 ### 🛡 Branch Protection Rules (from GitHub API)
 
+#### 🔒 Branch `auto/overview-18457408979`
+- No protection rules set
+#### 🔒 Branch `auto/overview-18458438980`
+- No protection rules set
+#### 🔒 Branch `backup`
+- No protection rules set
+#### 🔒 Branch `dev`
+- No protection rules set
+#### 🔒 Branch `main`
+- No protection rules set
 
 <!--RULESET_END-->
 
