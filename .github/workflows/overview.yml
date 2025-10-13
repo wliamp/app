@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: [settings.gradle]
+    paths: [ settings.gradle ]
   pull_request:
     branches: [ main ]
-    paths: [settings.gradle]
+    paths: [ settings.gradle ]
 
 jobs:
   gen-mindmap:
@@ -33,7 +33,7 @@ jobs:
           echo 'mindmap' >> structure.tmp
           echo "  ${root_name:-root}" >> structure.tmp
           repo_url="https://github.com/${GITHUB_REPOSITORY}/tree/main"
-          grep -E '^include' "$settings_file" | sed 's/include//;s/[":,()]//g' | tr -s ' ' '\n' | while read module; do
+          grep -E '^include' "$settings_file" | grep -oE "'[^']+'" | tr -d "'" | while read module; do
             [ -z "$module" ] && continue
             IFS=':' read -r -a parts <<< "$module"
             indent="  "
