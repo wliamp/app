@@ -23,7 +23,7 @@ jobs:
         manifests: ${{ vars.K8S_MANIFESTS_BASE }}/${{ github.event.inputs.repo }}
 
         image_space: ${{ vars.DOCKERHUB_REPO }}
-        approvers: ${{ vars.APPROVERS }}
+        approvers: ${{ vars.INCLUDE_DEPLOY_ACTORS }}
         staging_cluster: ${{ vars.K8S_STAGING_CLUSTER }}
         prod_cluster: ${{ vars.K8S_PROD_CLUSTER }}
         staging_namespace: ${{ vars.K8S_STAGING_NAMESPACE }}
@@ -33,5 +33,5 @@ jobs:
 
         slack: ${{ secrets.SLACK_WEBHOOK_URL }}
         k8s_config: ${{ secrets.K8S_CONFIG_BASE64 }}
-        grafana_key: ${{ secrets.GRAFANA_API_KEY }}
+        grafana_key: ${{ secrets.GRAFANA_ACCOUNT_TOKEN }}
 

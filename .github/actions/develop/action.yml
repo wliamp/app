@@ -28,7 +28,7 @@ runs:
       run: |
         BRANCH="${GITHUB_REF#refs/heads/}"
         if [[ ! "$BRANCH" =~ ^(main|release/.*|feature/.*|bugfix/.*)$ ]]; then
-          echo "❌ Branch '$BRANCH' is NOT ALLOWED for CI (DEVELOP)."
+          echo "❌ Branch '$BRANCH' is NOT ALLOWED for CI (DEVELOPMENT)."
           exit 1
         fi
         echo "✅ Branch validation passed for $BRANCH"
