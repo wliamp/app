@@ -49,10 +49,11 @@ update_section() {
   local start_tag=$1
   local end_tag=$2
   local content_file=$3
-  awk -v start="<!--${start_tag}-->" -v end="<!--${end_tag}-->" -v file="$content_file" '
-  $0 ~ start {print; system("cat " file); next}
-  $0 ~ end {found=1}
-  {print}
+  awk -v start="<!--${start_tag}-->" -v end="<!--${end_tag}-->" '
+    BEGIN {inside=0}
+    $0 ~ start {print; system("cat '"$content_file"'"); inside=1; next}
+    $0 ~ end {inside=0; print; next}
+    {if(!inside) print}
   ' README.md > tmp && mv tmp README.md
 }
 

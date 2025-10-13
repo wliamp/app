@@ -1,6 +1,5 @@
 ## 🧭 Repository Structure
 <!--STRUCTURE_START-->
-*(auto)*
 <!--STRUCTURE_END-->
 
 ---
@@ -114,14 +113,12 @@ chore(aqr): bump version 1.2.0
 
 ## ⚙️ Ruleset & Conventions
 <!--RULESET_START-->
-*(auto)*
 <!--RULESET_END-->
 
 ---
 
 ## 🚀 Workflows
 <!--WORKFLOWS_START-->
-*(auto)*
 <!--WORKFLOWS_END-->
 
 ---

@@ -13,8 +13,7 @@ permissions:
 
 jobs:
   overview:
-    if: >
-      contains(vars.INCLUDE_OVERVIEW_ACTORS, github.actor)
+    if: contains(vars.INCLUDE_OVERVIEW_ACTORS, github.actor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,13 +22,19 @@ jobs:
         run: bash .github/scripts/overview.sh
 
       - name: Commit changes
+        id: commit_changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git commit -m "auto update repo overview" || echo "No changes to commit"
+          if git diff --cached --quiet; then
+            echo "No changes detected in README.md, skipping commit."
+            exit 0
+          fi
+          git commit -m "auto update repo overview"
 
       - name: Create or update PR
+        if: steps.commit_changes.outcome == 'success'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.PAT }}
@@ -45,3 +50,4 @@ jobs:
 
             Please review and **squash-merge** to keep linear history clean.
           commit-message: "Auto update repository overview"
+          delete-branch: true
