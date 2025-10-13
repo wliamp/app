@@ -2,28 +2,25 @@
 <!-- START_STRUCTURE -->
 root<br>
 ├─ [shopping](./shopping)<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [merchant](./shopping/merchant)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;└─ [merchant](./shopping:merchant)<br>
 │<br>
 ├─ [payment](./payment)<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [gateway](./payment/gateway)<br>
-│<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [processor](./payment/processor)<br>
-│<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [card-network](./payment/card-network)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;├─ [gateway](./payment:gateway)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;├─ [processor](./payment:processor)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;└─ [card-network](./payment:card-network)<br>
 │<br>
 ├─ [banking](./banking)<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [issuer](./banking/issuer)<br>
-│<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [acquirer](./banking/acquirer)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;├─ [issuer](./banking:issuer)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;└─ [acquirer](./banking:acquirer)<br>
 │<br>
 ├─ [clearing-settlement](./clearing-settlement)<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./clearing-settlement/payment)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./clearing-settlement:payment)<br>
 │<br>
 ├─ [fraud-risk](./fraud-risk)<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./fraud-risk/payment)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./fraud-risk:payment)<br>
 │<br>
 ├─ [compliance-regulatory](./compliance-regulatory)<br>
-│&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./compliance-regulatory/payment)<br>
+│&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./compliance-regulatory:payment)<br>
 │<br>
 <!-- END_STRUCTURE -->
 
