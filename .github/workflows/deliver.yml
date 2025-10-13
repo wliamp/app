@@ -1,4 +1,4 @@
-name: Delivery
+name: Deliver
 
 on:
   push:
@@ -10,6 +10,8 @@ jobs:
   deliver:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/deliver
         with:
           docker_user: ${{ vars.DOCKERHUB_USER }}
