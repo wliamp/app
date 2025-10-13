@@ -1,32 +1,10 @@
 ## 🔧 Repository Structure
 <!-- START_STRUCTURE -->
-```text
-root
-├─ [shopping](./shopping)
-├─ [shopping](./shopping)
-│  ├─ [merchant](./shopping/merchant)
-├─ [payment](./payment)
-├─ [payment](./payment)
-│  ├─ [gateway](./payment/gateway)
-├─ [payment](./payment)
-│  ├─ [processor](./payment/processor)
-├─ [payment](./payment)
-│  ├─ [card-network](./payment/card-network)
-├─ [banking](./banking)
-├─ [banking](./banking)
-│  ├─ [issuer](./banking/issuer)
-├─ [banking](./banking)
-│  ├─ [acquirer](./banking/acquirer)
-├─ [clearing-settlement](./clearing-settlement)
-├─ [clearing-settlement](./clearing-settlement)
-│  ├─ [payment](./clearing-settlement/payment)
-├─ [fraud-risk](./fraud-risk)
-├─ [fraud-risk](./fraud-risk)
-│  ├─ [payment](./fraud-risk/payment)
-├─ [compliance-regulatory](./compliance-regulatory)
-├─ [compliance-regulatory](./compliance-regulatory)
-│  ├─ [payment](./compliance-regulatory/payment)
-```
+root<br>
+└─ [shopping](./shopping)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;└─ [merchant](./shopping/merchant)<br>
+│<br>
+│<br>
 <!-- END_STRUCTURE -->
 
 ---
