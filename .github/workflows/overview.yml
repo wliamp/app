@@ -45,4 +45,3 @@ jobs:
 
             Please review and **squash-merge** to keep linear history clean.
           commit-message: "Auto update repository overview"
-          delete-branch: true
