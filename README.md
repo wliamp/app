@@ -1,7 +1,22 @@
-## 🧭 Repository Structure
-<!--STRUCTURE_START-->
+## 🔧 Modules
 
-<!--STRUCTURE_END-->
+- [🛍️ Merchant](./merc) – The business or service provider accepting payments. Submits payment requests, receives funds, and reconciles transactions.
+
+- [🔗 Payment Gateway](./gtw) –The interface between merchant and payment networks. Handles authorization requests, tokenization, and routing to the payment processor.
+
+- [⚙️ Payment Processor](./pro) – Executes transaction processing on behalf of the merchant or acquirer. Connects to card networks and forwards authorizations, captures, and settlement instructions.
+
+- [🌐 Card Network / Clearing House](./net) – Facilitates transaction routing between issuers and acquirers, ensures settlement, and enforces network rules and standards.
+
+- [💳 Issuer System / Bank](./iss) – The cardholder’s bank or financial institution. Authorizes or declines transactions based on account status and fraud rules.
+
+- [🏦 Acquirer System / Bank](./aqr) – The merchant’s bank or acquiring processor. Receives funds from issuers via card networks and deposits them to merchant accounts.
+
+- [💱 Clearing & Settlement Authority](./cs) – Ensures final settlement of funds between issuers and acquirers, reconciles transactions, and provides reporting for auditing purposes.
+
+- [🕵️ Fraud / Risk Provider](./fr) – Monitors transactions for suspicious activity, applies fraud detection rules, and may block or flag transactions before settlement.
+
+- [⚖️ Compliance / Regulatory Authority](./reg) – Oversees adherence to legal and regulatory standards, anti-money laundering (AML), and financial reporting obligations.
 
 ---
 
@@ -112,74 +127,141 @@ chore(aqr): bump version 1.2.0
 
 ---
 
-## ⚙️ Ruleset & Conventions
-<!--RULESET_START-->
-### 🛡 Branch Protection Rules (from GitHub API)
+## 🛡 Branch Protection Rules
 
+#### 🔒 Protected
+- **Applied** `default` | `backup`
+- **Restrict** `deletion` | `creation` | `updates`
 
-<!--RULESET_END-->
+#### ⚙️ Workflows
+- **Applied** `dev` | `releases/*`
+- **Restrict** `creations` | `deletions` | `force pushes`
+- **Required**
+    - `signed commit`
+    - `pull request`
+        - dismiss stale approvals when new commits are pushed
+        - conversation resolution before merging
+        - allowed merge: *Squash*
+    - `status checks`
+        - up to date before merging
+        - required: *aggregate*, *no-changes*
+
+#### ✍️ Working
+- **Applied** `feature/*` | `bugfix/*` | `hotfix/*`
+- **Required** `signed commit`
 
 ---
 
-## 🚀 Workflows
-<!--WORKFLOWS_START-->
-### 📄 All GitHub YAML Configs (.github/)
+## 🚀 CI / CD Pipeline
+### 🧩 Continuous Integration
+#### Dev Branch Pipeline
+1. **Trigger**: `push` | `pull_request` → `dev`
+2. **Steps**:
+- **Branch Validation**: main, release/*, feature/*, bugfix/*, hotfix/*
+- **Dependency Caching**: Restore cached dependencies for faster build times.
+- **Static & Security Analysis**:
+    - **Static checks**: code style, linting, and type validation.
+    - **SAST (Static Application Security Testing)**: detect code vulnerabilities.
+    - **Dependencies**: vulnerability scanning.
+- **Testing & Building**: Run unit + integration tests, build modules, and generate coverage reports.
+- **Artifact Upload**: Upload test, coverage, and build artifacts to the CI server.
+- **Aggregate Validation**: Run aggregate + no-changes verification jobs.
+- **Image Pre-Build & Scan**:
+    - Build lightweight **Docker images** using multi-stage caching for speed.
+    - Run **Image Security Scan** to detect vulnerabilities before CD.
+3. **Visual**
+```mermaid
+flowchart TD
+    subgraph Stage1["Validation"]
+        A1[Push/PR → dev] --> A2[Validate branch naming]
+    end
+    subgraph Stage2["Build & Test"]
+        A3[Restore cached dependencies]
+        A4[Static checks + SAST + dep scan]
+        A5[Run Unit & Integration tests]
+    end
+    subgraph Stage3["Artifact & Reports"]
+        A6[Build artifacts + coverage]
+        A7[Upload artifacts & reports]
+        A8[Run aggregate + no-changes jobs]
+    end
+    subgraph Stage4["Image"]
+        A9[Pre-build Docker Image]
+        A10[Image Security Scan]
+    end
+    A2 --> A3
+    A5 --> A6
+    A8 --> A9
+```
 
-- **File:** .github/workflows/deliver.yml / **Name:** Deliver
-  - Triggered on: None
-  - Job: deliver (runs on ubuntu-latest)
-      * Step: uses → actions/checkout@v4
-      * Step: uses → ./.github/actions/deliver
+#### Scheduled Release Automation
+1. **Trigger**: Periodic (cron)
+2. **Steps**:
+- **Auto Branching**:
+    - Auto-create `release/<module>-<tag>` from `dev`.
+    - Validate the tag is the **latest semantic version** for that module.
+    - Maintain a persistent `module ↔ version` registry even if old releases are removed.
+- **Docker Build & Cache Optimization**:
+    - Build Docker images with **layer caching** for efficiency.
+    - Validate that image hashes remain deterministic (reproducible builds).
+- **Security & Compliance Scan**: Run SAST + Image scan again before release promotion.
+- **Manual Approval Gate**: Require admin/release manager approval before proceeding to CD.
+- **Reporting Jobs**: Summarize test results, image digests, and version mapping.
+3. **Visual**
+```mermaid
+flowchart TD
+    A1[Cron Trigger]
+    --> A2[Create release/<module>-<tag>]
+    --> A3[Validate latest version mapping]
+    --> A4[Build Docker layer cache optimized]
+    --> A5[SAST + Image Scan]
+    --> A6[Manual Approval Gate]
+    --> A7[Generate CI Reports]
+```
 
-- **File:** .github/workflows/deploy.yml / **Name:** Deploy
-  - Triggered on: None
-  - Job: delpoy (runs on ubuntu-latest)
-      * Step: uses → actions/checkout@v4
-      * Step: uses → ./.github/actions/deploy
+### ⚙️ Continuous Delivery & Deployment (CD)
+#### Delivery
+1. **Trigger**: `push` | `pull_request` → `main`
+2. **Steps**:
+    - **Branch Validation**: `release/*` | `hotfix/*`
+    - **Docker Build & Push**: Build Docker image using tag metadata → push to registry.
+    - **Image Scan (Final Gate)**: Re-scan pushed image for vulnerabilities before deploy approval.
+    - **Reporting & Notifications**: Generate changelogs, image digests, and send Slack/Discord notifications.
+3. **Visual**
+```mermaid
+flowchart TD
+    B1[Push/PR → main]
+    --> B2[Validate release/hotfix branch]
+    --> B3[Build Docker Image by tags]
+    --> B4[Push Image to Registry]
+    --> B5[Final Image Scan + Report]
+    --> B6[Send Notifications]
+```
 
-- **File:** .github/workflows/release.yml / **Name:** Release
-  - Triggered on: None
-  - Job: resolve-version (runs on ubuntu-latest)
-      * Step: uses → actions/checkout@v4
-      * Step: run → #!/bin/bash; set -euo pipefail; echo "🔍 Scanning repository for Dockerfiles..."; mapfile -t images < <(find . -type f -name 'Dockerfile' -printf '%h\n' | sed 's|^\./||' | sort); if [ ${#images[@]} -eq 0 ]; then;   echo "❌ No Dockerfiles found in repository.";   exit 1; fi; echo "🧾 Found Docker image directories:"; printf ' - %s\n' "${images[@]}"; versions='[]'; for image in "${images[@]}"; do;   echo "🔍 Checking latest version for $image ...";   latest=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1" \;     | jq -r '.results[0].name' || echo "0.0.0");   if [[ -z "$latest" || "$latest" == "null" ]]; then;     latest="0.0.0";   fi;   echo "➡️ Found latest tag: $latest";   IFS='.' read -r major minor patch <<< "$latest";   major=${major:-0};   minor=${minor:-0};   patch=${patch:-0};   patch=$((patch + 1));   if (( patch > 9 )); then;     patch=0;     minor=$((minor + 1));   fi;   if (( minor > 9 )); then;     minor=0;     major=$((major + 1));   fi;   next="$major.$minor.$patch";   echo "🔢 Next version for $image → $next";   versions=$(jq -c --arg i "$image" --arg v "$next" \;     '. + [{"image":$i,"version":$v}]' <<< "${versions:-[]}"); done; echo "✅ Final version matrix:"; echo "$versions" | jq .; echo "matrix={\"include\":$versions}" >> $GITHUB_OUTPUT; 
-  - Job: release (runs on ubuntu-latest)
-      * Step: uses → ./.github/actions/release
-
-- **File:** .github/workflows/overview.yml / **Name:** Overview
-  - Triggered on: None
-  - Job: overview (runs on ubuntu-latest)
-      * Step: uses → actions/checkout@v4
-      * Step: uses → actions/setup-python@v4
-      * Step: run → pip install pyyaml requests
-      * Step: run → bash .github/scripts/overview.sh
-      * Step: run → git config user.name "github-actions[bot]"; git config user.email "github-actions[bot]@users.noreply.github.com"; git add README.md; if git diff --cached --quiet; then;   echo "No changes detected in README.md, skipping commit.";   exit 0; fi; git commit -m "auto update repo overview"; 
-      * Step: uses → peter-evans/create-pull-request@v6
-
-- **File:** .github/workflows/develop.yml / **Name:** Develop
-  - Triggered on: None
-  - Job: detect-changes (runs on ubuntu-latest)
-      * Step: uses → actions/checkout@v4
-      * Step: run → echo "🔍 Scanning repo for modules..."; find . -mindepth 2 -maxdepth 2 -type f -name "build.gradle*" \;   | sed 's|^\./||; s|/build.gradle.*||' \;   | sort > /tmp/all_modules.txt; jq -R -s -c 'split("\n")[:-1] | map(split("/")) | map({scope:.[0], module:.[1]})' /tmp/all_modules.txt > /tmp/all_modules.json; echo "::notice::Discovered modules:"; cat /tmp/all_modules.json | jq .; echo "all_modules=$(cat /tmp/all_modules.json)" >> $GITHUB_OUTPUT; 
-      * Step: run → base=$(git merge-base origin/dev HEAD || echo ""); if [[ -z "$base" ]]; then;   echo "::warning::No base branch found → assuming full build";   echo "level=root" >> $GITHUB_OUTPUT;   exit 0; fi; git diff --name-only "$base" HEAD > /tmp/changed.txt; echo "::notice::Changed files:"; sed 's/^/  - /' /tmp/changed.txt || true; if grep -qE '^[^/]+$' /tmp/changed.txt; then;   echo "level=root" >> $GITHUB_OUTPUT;   echo "::warning::Root-level change detected → full CI mode"; else;   echo "level=module" >> $GITHUB_OUTPUT; fi; 
-      * Step: run → level="${{ steps.detect.outputs.level }}"; all=$(cat /tmp/all_modules.json); if [[ "$level" == "root" ]]; then;   echo "::notice::Root-level change → use full matrix";   matrix="$all"; else;   echo "::notice::Analyzing changed scopes/modules...";   awk -F'/' '{print $1}' /tmp/changed.txt | sort -u > /tmp/scopes.txt;   awk -F'/' '{print $1"/"$2}' /tmp/changed.txt | sort -u > /tmp/paths.txt;   matrix=$(jq -c \;     --argjson all "$all" \;     --argjson scopes "$(jq -R -s 'split("\n")[:-1]' < /tmp/scopes.txt)" \;     --argjson mods "$(jq -R -s 'split("\n")[:-1]' < /tmp/paths.txt)" ';     [ $all[] | select(;         ($scopes | index(.scope));         or;         ($mods | index((.scope + "/" + .module)));       ) ]');   if [[ "$(jq length <<< "$matrix")" -eq 0 ]]; then;     echo "::warning::No module match found → full build";     matrix="$all";   fi; fi; echo "matrix=$matrix" >> $GITHUB_OUTPUT; echo "::notice::Final build matrix:"; echo "$matrix" | jq .; 
-      * Step: run → rm -f /tmp/*.txt /tmp/*.json || true; echo "::notice::Temporary files cleaned."; 
-  - Job: develop (runs on ubuntu-latest)
-      * Step: uses → actions/checkout@v4
-      * Step: uses → ./.github/actions/develop
-
-- **File:** .github/actions/release/action.yml / **Name:** .github/actions/release/action.yml
-  - Triggered on: None
-
-- **File:** .github/actions/develop/action.yml / **Name:** .github/actions/develop/action.yml
-  - Triggered on: None
-
-- **File:** .github/actions/deploy/action.yml / **Name:** .github/actions/deploy/action.yml
-  - Triggered on: None
-
-- **File:** .github/actions/deliver/action.yml / **Name:** .github/actions/deliver/action.yml
-  - Triggered on: None
-
-<!--WORKFLOWS_END-->
+#### Deployment
+1. **Trigger**: Manual (Admin) or Scheduled
+2. **Steps**:
+    - **Staging Deployment**:
+        - Deploy image to staging cluster using K8s manifests or Helm charts.
+        - Run **health checks** and **smoke tests**.
+    - **Manual Gate**: Require manual approval before production rollout.
+    - **Production Deployment**: Use rolling update or blue-green deployment via Kubernetes.
+    - **Observability Integration**:
+        - Collect logs (ELK, Loki, or CloudWatch).
+        - Send metrics to Prometheus + Grafana dashboards.
+        - Trigger alerts (PagerDuty, Opsgenie, etc.) if anomalies are detected.
+    - **Post-Deployment Reports**: Summarize uptime, deployment success rate, and rollback readiness.
+3. **Visual**
+```mermaid
+flowchart TD
+    B1[Manual/Cron → main]
+    --> B2[Staging Deployment - K8s]
+    --> B3[Health Checks + Smoke Tests]
+    --> B4[Manual Gate → Production]
+    --> B5[Rolling / Blue-Green Deployment]
+    --> B6[Observability: Logs + Metrics + Alerts]
+    --> B7[Post-Deployment Reports]
+```
 
 ---
 
