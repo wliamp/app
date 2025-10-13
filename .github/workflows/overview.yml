@@ -42,8 +42,8 @@ jobs:
             done
           done
           echo '```' >> structure.tmp
-          start="<!-- START_FOLDER_STRUCTURE -->"
-          end="<!-- END_FOLDER_STRUCTURE -->"
+          start="<!-- START_STRUCTURE -->"
+          end="<!-- END_STRUCTURE -->"
           content=$(cat structure.tmp)
           if grep -q "$start" README.md && grep -q "$end" README.md; then
             awk -v s="$start" -v e="$end" -v r="$content" '
