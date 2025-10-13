@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 shopt -s extglob
+# shellcheck disable=SC2010
 settings_file=$(ls | grep -E "settings.gradle(\.kts)?$" || true)
 if [ -z "$settings_file" ]; then
   echo "❌ settings.gradle NOT FOUND"
@@ -39,6 +40,7 @@ print_tree() {
   local prefix="$1"
   local parent="$2"
   local key="${parent:-__root__}"
+  # shellcheck disable=SC2206
   local children=(${children_map[$key]:-})
   local count=${#children[@]}
   for ((i=0; i<count; i++)); do
@@ -55,13 +57,14 @@ print_tree() {
     print_tree "$new_prefix" "${parent:+$parent:}$child"
   done
 }
+# shellcheck disable=SC2206
 top_level=(${children_map[__root__]:-})
 count=${#top_level[@]}
 for ((i=0; i<count; i++)); do
-  local mod="${top_level[$i]}"
-  local is_last=$(( i == count - 1 ))
-  local branch="├─"
-  local prefix="│&nbsp;&nbsp;"
+  mod="${top_level[$i]}"
+  is_last=$(( i == count - 1 ))
+  branch="├─"
+  prefix="│&nbsp;&nbsp;"
   if (( is_last )); then
     branch="└─"
     prefix="&nbsp;&nbsp;&nbsp;&nbsp;"
