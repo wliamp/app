@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: [ settings.gradle ]
+    paths: [ settings.gradle, settings.gradle.kts ]
   pull_request:
     branches: [ main ]
-    paths: [ settings.gradle ]
+    paths: [ settings.gradle, settings.gradle.kts ]
 
 jobs:
   gen-mindmap:
@@ -18,14 +18,13 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Generate Mermaid mindmap from Gradle settings
         run: |
           settings_file=$(ls | grep -E "settings.gradle(\.kts)?$" || echo "")
           if [ -z "$settings_file" ]; then
-            echo "❌ settings.gradle NOT FOUND"
+            echo "❌ settings.gradle(.kts) NOT FOUND"
             exit 1
           fi
           root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\([^'\"]*\)['\"].*/\1/")
@@ -34,7 +33,11 @@ jobs:
           echo "  ${root_name:-root}" >> structure.tmp
           repo_url="https://github.com/${GITHUB_REPOSITORY}/tree/main"
           include_lines=$(awk '
-            /^\s*include/ {line=$0; next}
+            /^\s*include/ {
+            gsub(/^\s*include\s*/, "");
+            line=$0;
+            next
+            }
             /^\s+/ {line=line" "$0; next}
             END {print line}
           ' "$settings_file")
