@@ -1,5 +1,11 @@
 ## 🔧 Repository Structure
 <!-- START_STRUCTURE -->
+```mermaid
+mindmap
+  root
+    [[https://github.com/wliamp/pps/tree/main/'shopping'|'shopping']]
+    [[https://github.com/wliamp/pps/tree/main/'shoppingmerchant'|'shoppingmerchant']]
+```
 <!-- END_STRUCTURE -->
 
 ---
