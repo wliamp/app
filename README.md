@@ -1,5 +1,6 @@
 ## 🧭 Repository Structure
 <!--STRUCTURE_START-->
+
 <!--STRUCTURE_END-->
 
 ---
@@ -113,12 +114,50 @@ chore(aqr): bump version 1.2.0
 
 ## ⚙️ Ruleset & Conventions
 <!--RULESET_START-->
+### ⚙️ Detected Rules and Configurations
+
+- 🧩 **EditorConfig** detected
+- 🧱 **Gradle project root**
+- 🔧 **Custom GitHub Actions** found in `.github/actions`
+- ⚙️ **Multi-module Gradle project** setup
+
 <!--RULESET_END-->
 
 ---
 
 ## 🚀 Workflows
 <!--WORKFLOWS_START-->
+### 🚀 CI/CD Workflows
+- **Deliver**
+  ```yaml
+    on:
+      push:
+      pull_request:
+  ```
+- **Deploy**
+  ```yaml
+    on:
+      workflow_dispatch:
+  ```
+- **Develop**
+  ```yaml
+    on:
+      push:
+      pull_request:
+  ```
+- **Overview**
+  ```yaml
+    on:
+      workflow_dispatch:
+      push:
+      pull_request:
+  ```
+- **Release**
+  ```yaml
+    on:
+      schedule:
+      workflow_dispatch:
+  ```
 <!--WORKFLOWS_END-->
 
 ---
