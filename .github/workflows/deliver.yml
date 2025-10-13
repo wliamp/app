@@ -8,6 +8,8 @@ on:
 
 jobs:
   deliver:
+    if: >
+      !contains(vars.EXCLUDE_DELIVER_ACTORS, github.actor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
