@@ -1,0 +1,25 @@
+name: Auto Update Repo Overview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  overview:
+    if: >
+      contains(vars.INCLUDE_OVERVIEW_ACTORS, github.actor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Repo Overview
+        run: bash .github/scripts/overview.sh
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Update README root" || echo "No changes to commit"
+          git push
