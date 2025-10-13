@@ -1,21 +1,32 @@
 ## 🔧 Repository Structure
 <!-- START_STRUCTURE -->
-root<br>
-├─ [shopping](./shopping)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [merchant](./shopping/merchant)<br>
-├─ [payment](./payment)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [gateway](./payment/gateway)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [processor](./payment/processor)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [card-network](./payment/card-network)<br>
-├─ [banking](./banking)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [issuer](./banking/issuer)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [acquirer](./banking/acquirer)<br>
-├─ [clearing-settlement](./clearing-settlement)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./clearing-settlement/payment)<br>
-├─ [fraud-risk](./fraud-risk)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./fraud-risk/payment)<br>
-├─ [compliance-regulatory](./compliance-regulatory)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;└─ [payment](./compliance-regulatory/payment)<br>
+```text
+root
+├─ [shopping](./shopping)
+├─ [shopping](./shopping)
+│  ├─ [merchant](./shopping/merchant)
+├─ [payment](./payment)
+├─ [payment](./payment)
+│  ├─ [gateway](./payment/gateway)
+├─ [payment](./payment)
+│  ├─ [processor](./payment/processor)
+├─ [payment](./payment)
+│  ├─ [card-network](./payment/card-network)
+├─ [banking](./banking)
+├─ [banking](./banking)
+│  ├─ [issuer](./banking/issuer)
+├─ [banking](./banking)
+│  ├─ [acquirer](./banking/acquirer)
+├─ [clearing-settlement](./clearing-settlement)
+├─ [clearing-settlement](./clearing-settlement)
+│  ├─ [payment](./clearing-settlement/payment)
+├─ [fraud-risk](./fraud-risk)
+├─ [fraud-risk](./fraud-risk)
+│  ├─ [payment](./fraud-risk/payment)
+├─ [compliance-regulatory](./compliance-regulatory)
+├─ [compliance-regulatory](./compliance-regulatory)
+│  ├─ [payment](./compliance-regulatory/payment)
+```
 <!-- END_STRUCTURE -->
 
 ---

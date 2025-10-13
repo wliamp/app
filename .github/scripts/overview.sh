@@ -1,7 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
-shopt -s extglob
-# shellcheck disable=SC2010
 settings_file=$(ls | grep -E "settings.gradle(\.kts)?$" || true)
 if [ -z "$settings_file" ]; then
   echo "❌ settings.gradle NOT FOUND"
@@ -12,67 +10,42 @@ tmpfile="structure.tmp"
 root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\\(.*\\)['\"].*/\\1/")
 root_name=${root_name:-root}
 echo "$root_name<br>" > "$tmpfile"
-includes=$(awk '
-  /^[[:space:]]*include[[:space:]]*\(/ {
-    match($0, /\(.*\)/)
-    args = substr($0, RSTART+1, RLENGTH-2)
-    gsub(/'\''|"/, "", args)
-    gsub(/,/, " ", args)
-    print args
-  }
-' "$settings_file" | tr '\n' ' ')
-if [ -z "$includes" ]; then
-  echo "⚠️ No modules found in $settings_file"
-  exit 0
-fi
-declare -A children_map
-for module in $includes; do
+includes=$(grep -E "include\s*\(" "$settings_file" | sed "s/.*include\s*(//;s/)//" | tr -d "'\"" | tr ',' ' ')
+modules=($includes)
+declare -A children
+for module in "${modules[@]}"; do
   IFS=':' read -ra parts <<< "$module"
-  parent=""
-  for ((i=0; i<${#parts[@]}-1; i++)); do
-    parent="${parent:+$parent:}${parts[i]}"
-  done
-  child="${parts[-1]}"
-  key="${parent:-__root__}"
-  children_map["$key"]+="$child "
+  if ((${#parts[@]} == 1)); then
+    parent="__root__"
+    child="${parts[0]}"
+  else
+    parent="${parts[*]:0:${#parts[@]}-1}"
+    parent="${parent// /:}"
+    child="${parts[-1]}"
+  fi
+  children["$parent"]+="$child "
 done
 print_tree() {
-  local prefix="$1"
-  local parent="$2"
-  local key="${parent:-__root__}"
-  # shellcheck disable=SC2206
-  local children=(${children_map[$key]:-})
-  local count=${#children[@]}
+  local parent="$1"
+  local prefix="$2"
+  local list=(${children[$parent]:-})
+  local count=${#list[@]}
+
   for ((i=0; i<count; i++)); do
-    local child="${children[$i]}"
-    local is_last=$(( i == count - 1 ))
+    local child="${list[$i]}"
+    local is_last=$((i == count - 1))
     local branch="├─"
     local new_prefix="${prefix}│&nbsp;&nbsp;"
-    if (( is_last )); then
+    if ((is_last)); then
       branch="└─"
       new_prefix="${prefix}&nbsp;&nbsp;&nbsp;&nbsp;"
     fi
     local display_path="${parent//:/\/}${parent:+/}${child}"
     echo "${prefix}${branch} [${child}](./${display_path})<br>" >> "$tmpfile"
-    print_tree "$new_prefix" "${parent:+$parent:}$child"
+    print_tree "${parent:+$parent:}$child" "$new_prefix"
   done
 }
-# shellcheck disable=SC2206
-top_level=(${children_map[__root__]:-})
-count=${#top_level[@]}
-for ((i=0; i<count; i++)); do
-  mod="${top_level[$i]}"
-  is_last=$(( i == count - 1 ))
-  branch="├─"
-  prefix="│&nbsp;&nbsp;"
-  if (( is_last )); then
-    branch="└─"
-    prefix="&nbsp;&nbsp;&nbsp;&nbsp;"
-  fi
-  echo "${branch} [${mod}](./${mod})<br>" >> "$tmpfile"
-  print_tree "$prefix" "$mod"
-  echo "│<br>" >> "$tmpfile"
-done
+print_tree "__root__" ""
 start="<!-- START_STRUCTURE -->"
 end="<!-- END_STRUCTURE -->"
 content=$(cat "$tmpfile")
