@@ -33,11 +33,11 @@ echo "$includes" | tr ' ' '\n' | while read -r module; do
   done
   if (( depth == 1 )); then
     echo "├─ [${parts[-1]}](./${parts[0]})<br>" >> "$tmpfile"
-    echo "│<br>" >> "$tmpfile"
   else
     parent_path=$(IFS='/'; echo "${parts[*]:0:$((depth-1))}")
     child="${parts[-1]}"
     echo "${indent}└─ [${child}](./${parent_path}/${child})<br>" >> "$tmpfile"
+    echo "│<br>" >> "$tmpfile"
   fi
 done
 start="<!-- START_STRUCTURE -->"
