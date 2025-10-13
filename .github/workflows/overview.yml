@@ -38,7 +38,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.PAT }}
-          branch: auto/overview
+          branch: auto/overview-${{ github.run_id }}
           base: main
           title: "Overview"
           body: |
