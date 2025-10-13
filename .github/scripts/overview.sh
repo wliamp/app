@@ -1,105 +1,47 @@
-#!/usr/bin/env bash
-set -euo pipefail
-settings_file="settings.gradle"
-readme="README.md"
-tmpfile="$(mktemp)"
-ROOT_KEY="__root__"
-if [ ! -f "$settings_file" ]; then
-  echo "❌ $settings_file NOT FOUND"
+#!/bin/bash
+set -e
+settings_file=$(ls | grep -E "settings.gradle(\.kts)?$" || true)
+if [ -z "$settings_file" ]; then
+  echo "❌ settings.gradle NOT FOUND"
   exit 1
 fi
-root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\([^'\"]*\)['\"].*/\1/")
+readme="README.md"
+tmpfile="structure.tmp"
+root_name=$(grep -E "^rootProject.name" "$settings_file" | sed "s/.*['\"]\\(.*\\)['\"].*/\\1/")
 root_name=${root_name:-root}
-include_block=$(awk '
-  BEGIN {found=0;buf=""}
-  /^\s*include/ {
-    line=$0
-    sub(/^\s*include\s*/, "", line)
-    buf=line
-    found=1
-    next
-  }
-  found && /^\s+/ {
-    buf=buf" "$0
-    next
-  }
-  END {
-    if(found) print buf
-  }
+echo '```text' > "$tmpfile"
+echo "$root_name" >> "$tmpfile"
+includes=$(awk '
+  /include/ { collecting=1 }
+  collecting { line=line $0 }
+  /)$/ { collecting=0 }
+  END { gsub("include", "", line); print line }
 ' "$settings_file")
-if [ -z "$include_block" ]; then
-  echo "⚠️ No includes found in $settings_file"
-  exit 0
-fi
-modules_list=$(printf "%s" "$include_block" \
+echo "$includes" \
+  | tr -d "'" \
   | tr ',' '\n' \
-  | sed "s/'//g; s/^[ \t]*//; s/[ \t]*$//" \
-  | sed '/^$/d')
-declare -A children
-declare -A seen_child
-declare -A exists_node
-append_child() {
-  local parent="$1"
-  local child="$2"
-  local key="${parent}|${child}"
-  if [ -z "${seen_child[$key]:-}" ]; then
-    if [ -z "${children[$parent]:-}" ]; then
-      children[$parent]="$child"
-    else
-      children[$parent]="${children[$parent]}"$'\n'"$child"
-    fi
-    seen_child[$key]=1
-  fi
-}
-IFS=$'\n'
-for module in $modules_list; do
-  [ -z "$module" ] && continue
-  IFS=':' read -ra parts <<< "$module"
-  full=""
-  parent="$ROOT_KEY"
-  for i in "${!parts[@]}"; do
-    part="${parts[$i]}"
-    if [ -z "$full" ]; then
-      full="$part"
-    else
-      full="$full/$part"
-    fi
-    exists_node["$full"]=1
-    append_child "$parent" "$full"
-    parent="$full"
+  | sed '/^\s*$/d' \
+  | while read -r module; do
+      module=$(echo "$module" | xargs)
+      IFS=':' read -ra parts <<< "$module"
+      path_acc=""
+      for ((i=0; i<${#parts[@]}; i++)); do
+          part="${parts[$i]}"
+          if [ -z "$path_acc" ]; then
+              path_acc="$part"
+          else
+              path_acc="$path_acc/$part"
+          fi
+          indent=$(printf "%${i}s" "")
+          indent="${indent// /│  }"
+          branch="├─"
+          echo "$indent$branch [${part}](./${path_acc})" >> "$tmpfile"
+      done
   done
-done
-unset IFS
-print_node_children() {
-  local parent="$1"
-  local prefix="$2"
-  local list="${children[$parent]:-}"
-  [ -z "$list" ] && return
-  IFS=$'\n' read -rd '' -a arr <<<"$list" || true
-  local count=${#arr[@]}
-  for idx in "${!arr[@]}"; do
-    local child_full="${arr[$idx]}"
-    local label="${child_full##*/}"
-    if [ "$idx" -eq $((count-1)) ]; then
-      branch="└─ "
-      next_prefix="${prefix}   "
-    else
-      branch="├─ "
-      next_prefix="${prefix}│  "
-    fi
-    printf "%s%s[%s](./%s)\n" "$prefix" "$branch" "$label" "$child_full" >> "$tmpfile"
-    print_node_children "$child_full" "$next_prefix"
-  done
-}
-{
-  echo '```text'
-  echo "$root_name"
-  print_node_children "$ROOT_KEY" ""
-  echo '```'
-} > "$tmpfile"
+echo '```' >> "$tmpfile"
 start="<!-- START_STRUCTURE -->"
 end="<!-- END_STRUCTURE -->"
-content="$(cat "$tmpfile")"
+content=$(cat "$tmpfile")
 if [ ! -f "$readme" ]; then
   echo "# Project Overview" > "$readme"
 fi
@@ -112,4 +54,3 @@ if grep -q "$start" "$readme" && grep -q "$end" "$readme"; then
 else
   echo -e "\n$start\n$content\n$end" >> "$readme"
 fi
-rm -f "$tmpfile"
