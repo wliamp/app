@@ -262,3 +262,12 @@ This repository is licensed under the **MIT** License
 ## 📫 Contact:
 `phnam230197@gmail.com`
 
+
+<!-- START_FOLDER_STRUCTURE -->
+```mermaid
+graph TD
+  root(root)
+  root --> 'shopping'
+  root --> 'shoppingmerchant'
+```
+<!-- END_FOLDER_STRUCTURE -->
