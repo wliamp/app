@@ -29,10 +29,11 @@ echo "$includes" | tr ' ' '\n' | while read -r module; do
   depth=${#parts[@]}
   indent=""
   for ((i=1; i<depth; i++)); do
-    indent="${indent}&nbsp;&nbsp;&nbsp;&nbsp;"
+    indent="${indent}│&nbsp;&nbsp;&nbsp;&nbsp;"
   done
   if (( depth == 1 )); then
     echo "├─ [${parts[-1]}](./${parts[0]})<br>" >> "$tmpfile"
+    echo "│<br>" >> "$tmpfile"
   else
     parent_path=$(IFS='/'; echo "${parts[*]:0:$((depth-1))}")
     child="${parts[-1]}"
