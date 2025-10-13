@@ -1,5 +1,24 @@
 ## 🔧 Repository Structure
 <!-- START_STRUCTURE -->
+```mermaid
+mindmap
+  root
+    [[https://github.com/wliamp/pps/tree/main/shopping|shopping]]
+      [[https://github.com/wliamp/pps/tree/main/shopping/merchant|merchant]]
+    [[https://github.com/wliamp/pps/tree/main/payment|payment]]
+      [[https://github.com/wliamp/pps/tree/main/payment/gateway|gateway]]
+      [[https://github.com/wliamp/pps/tree/main/payment/processor|processor]]
+      [[https://github.com/wliamp/pps/tree/main/payment/card-network|card-network]]
+    [[https://github.com/wliamp/pps/tree/main/banking|banking]]
+      [[https://github.com/wliamp/pps/tree/main/banking/issuer|issuer]]
+      [[https://github.com/wliamp/pps/tree/main/banking/acquirer|acquirer]]
+    [[https://github.com/wliamp/pps/tree/main/clearing-settlement|clearing-settlement]]
+      [[https://github.com/wliamp/pps/tree/main/clearing-settlement/payment|payment]]
+    [[https://github.com/wliamp/pps/tree/main/fraud-risk|fraud-risk]]
+      [[https://github.com/wliamp/pps/tree/main/fraud-risk/payment|payment]]
+    [[https://github.com/wliamp/pps/tree/main/compliance-regulatory|compliance-regulatory]]
+      [[https://github.com/wliamp/pps/tree/main/compliance-regulatory/payment|payment]]
+```
 <!-- END_STRUCTURE -->
 
 ---
