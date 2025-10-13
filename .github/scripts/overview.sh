@@ -13,8 +13,12 @@ echo "$root_name<br>" > "$tmpfile"
 includes=$(awk '
   /include/ {
     line = $0
-    while (getline next && next ~ /^[[:space:]]*[[:alnum:]\047:,_-]/) {
-      line = line " " next
+    while (getline next) {
+      if (next ~ /^[[:space:]]*['"'"'[:alnum:]_:\\-,]+[[:space:]]*,?[[:space:]]*$/) {
+        line = line " " next
+      } else {
+        break
+      }
     }
     gsub(/include/, "", line)
     print line
