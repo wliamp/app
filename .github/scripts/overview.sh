@@ -23,21 +23,49 @@ if [ -z "$includes" ]; then
   echo "⚠️ No modules found in $settings_file"
   exit 0
 fi
-echo "$includes" | tr ' ' '\n' | while read -r module; do
-  [[ -z "$module" ]] && continue
+declare -A children_map
+for module in $includes; do
   IFS=':' read -ra parts <<< "$module"
-  depth=${#parts[@]}
-  indent=""
-  for ((i=1; i<depth; i++)); do
-    indent="${indent}&nbsp;&nbsp;&nbsp;&nbsp;"
+  parent=""
+  for ((i=0; i<${#parts[@]}-1; i++)); do
+    parent="${parent:+$parent:}${parts[i]}"
   done
-  if (( depth == 1 )); then
-    echo "├─ [${parts[-1]}](./${parts[0]})<br>" >> "$tmpfile"
-  else
-    parent_path=$(IFS='/'; echo "${parts[*]:0:$((depth-1))}")
-    child="${parts[-1]}"
-    echo "${indent}└─ [${child}](./${parent_path}/${child})<br>" >> "$tmpfile"
+  child="${parts[-1]}"
+  children_map["$parent"]+="$child "
+done
+print_tree() {
+  local prefix="$1"
+  local parent="$2"
+  local children=(${children_map[$parent]})
+  local count=${#children[@]}
+  for ((i=0; i<count; i++)); do
+    local child="${children[$i]}"
+    local is_last=$(( i == count - 1 ))
+    local branch="├─"
+    local new_prefix="${prefix}│&nbsp;&nbsp;"
+    if (( is_last )); then
+      branch="└─"
+      new_prefix="${prefix}&nbsp;&nbsp;&nbsp;&nbsp;"
+    fi
+    local display_path="${parent//:/\/}/${parent:+/}${child}"
+    echo "${prefix}${branch} [${child}](./${display_path})<br>" >> "$tmpfile"
+    print_tree "$new_prefix" "${parent:+$parent:}$child"
+  done
+}
+top_level=($(echo "$includes" | tr ' ' '\n' | awk -F':' '{print $1}' | sort -u))
+count=${#top_level[@]}
+for ((i=0; i<count; i++)); do
+  local mod="${top_level[$i]}"
+  local is_last=$(( i == count - 1 ))
+  local branch="├─"
+  local prefix="│&nbsp;&nbsp;"
+  if (( is_last )); then
+    branch="└─"
+    prefix="&nbsp;&nbsp;&nbsp;&nbsp;"
   fi
+  echo "${branch} [${mod}](./${mod})<br>" >> "$tmpfile"
+  print_tree "$prefix" "$mod"
+  echo "│<br>" >> "$tmpfile"
 done
 start="<!-- START_STRUCTURE -->"
 end="<!-- END_STRUCTURE -->"
