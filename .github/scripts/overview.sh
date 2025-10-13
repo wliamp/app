@@ -3,6 +3,7 @@ set -euo pipefail
 settings_file="settings.gradle"
 readme="README.md"
 tmpfile="$(mktemp)"
+ROOT_KEY="__root__"
 if [ ! -f "$settings_file" ]; then
   echo "❌ $settings_file NOT FOUND"
   exit 1
@@ -27,20 +28,20 @@ include_block=$(awk '
   }
 ' "$settings_file")
 if [ -z "$include_block" ]; then
-  modules_list=""
-else
-  modules_list=$(printf "%s" "$include_block" \
-    | tr ',' '\n' \
-    | sed "s/'//g; s/^[ \t]*//; s/[ \t]*$//" \
-    | sed '/^$/d')
+  echo "⚠️ No includes found in $settings_file"
+  exit 0
 fi
+modules_list=$(printf "%s" "$include_block" \
+  | tr ',' '\n' \
+  | sed "s/'//g; s/^[ \t]*//; s/[ \t]*$//" \
+  | sed '/^$/d')
 declare -A children
 declare -A seen_child
 declare -A exists_node
 append_child() {
-  parent="$1"
-  child="$2"
-  key="${parent}|${child}"
+  local parent="$1"
+  local child="$2"
+  local key="${parent}|${child}"
   if [ -z "${seen_child[$key]:-}" ]; then
     if [ -z "${children[$parent]:-}" ]; then
       children[$parent]="$child"
@@ -55,7 +56,7 @@ for module in $modules_list; do
   [ -z "$module" ] && continue
   IFS=':' read -ra parts <<< "$module"
   full=""
-  parent=""
+  parent="$ROOT_KEY"
   for i in "${!parts[@]}"; do
     part="${parts[$i]}"
     if [ -z "$full" ]; then
@@ -70,17 +71,15 @@ for module in $modules_list; do
 done
 unset IFS
 print_node_children() {
-  parent="$1"
-  prefix="$2"
-  list="${children[$parent]:-}"
-  if [ -z "$list" ]; then
-    return
-  fi
+  local parent="$1"
+  local prefix="$2"
+  local list="${children[$parent]:-}"
+  [ -z "$list" ] && return
   IFS=$'\n' read -rd '' -a arr <<<"$list" || true
-  count=${#arr[@]}
+  local count=${#arr[@]}
   for idx in "${!arr[@]}"; do
-    child_full="${arr[$idx]}"
-    label="${child_full##*/}"
+    local child_full="${arr[$idx]}"
+    local label="${child_full##*/}"
     if [ "$idx" -eq $((count-1)) ]; then
       branch="└─ "
       next_prefix="${prefix}   "
@@ -91,14 +90,13 @@ print_node_children() {
     printf "%s%s[%s](./%s)\n" "$prefix" "$branch" "$label" "$child_full" >> "$tmpfile"
     print_node_children "$child_full" "$next_prefix"
   done
-  unset IFS
 }
 {
   echo '```text'
   echo "$root_name"
+  print_node_children "$ROOT_KEY" ""
+  echo '```'
 } > "$tmpfile"
-print_node_children "" ""
-echo '```' >> "$tmpfile"
 start="<!-- START_STRUCTURE -->"
 end="<!-- END_STRUCTURE -->"
 content="$(cat "$tmpfile")"
