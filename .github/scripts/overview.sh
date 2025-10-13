@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-set -x  # bật debug khi chạy
+set -x
 
 echo "🏗️ Generating full repository overview..."
 
@@ -12,8 +12,8 @@ generate_structure() {
   id_counter=0
 
   traverse() {
-    local path=$1
-    local parent_id=$2
+    local path="${1:-.}"
+    local parent_id="${2:-A}"
     for item in "$path"/*; do
       [[ -e "$item" ]] || continue
       id_counter=$((id_counter+1))
