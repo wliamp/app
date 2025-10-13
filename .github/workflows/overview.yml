@@ -16,12 +16,21 @@ jobs:
     if: contains(vars.INCLUDE_OVERVIEW_ACTORS, github.actor)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install PyYAML (required for overview.sh)
+        run: pip install pyyaml requests
 
       - name: Generate Repo Overview
         run: bash .github/scripts/overview.sh
 
-      - name: Commit changes
+      - name: Commit changes if any
         id: commit_changes
         run: |
           git config user.name "github-actions[bot]"
