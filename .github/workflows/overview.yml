@@ -33,17 +33,31 @@ jobs:
           echo 'mindmap' >> structure.tmp
           echo "  ${root_name:-root}" >> structure.tmp
           repo_url="https://github.com/${GITHUB_REPOSITORY}/tree/main"
-          includes=$(grep -E '^\s*include' "$settings_file" | tr -d '\n' | sed "s/include//g" | sed "s/'//g" | sed "s/ //g" | sed "s/,/ /g")
-          for module in $includes; do
+          include_lines=$(awk '
+            /^\s*include/ {line=$0; next}
+            /^\s+/ {line=line" "$0; next}
+            END {print line}
+          ' "$settings_file")
+          modules=$(echo "$include_lines" | tr ',' '\n' | sed "s/'//g" | sed 's/^[ \t]*//;s/[ \t]*$//')
+          declare -A added_paths  # tránh duplicate node
+          for module in $modules; do
               [ -z "$module" ] && continue
               IFS=':' read -r -a parts <<< "$module"
               indent="  "
+              path_acc=""
               for i in "${!parts[@]}"; do
                   indent+="  "
                   part="${parts[$i]}"
-                  path=$(IFS=/; echo "${parts[*]:0:$((i+1))}")
-                  url="$repo_url/$path"
-                  echo "${indent}[[$url|$part]]" >> structure.tmp
+                  if [ -z "$path_acc" ]; then
+                      path_acc="$part"
+                  else
+                      path_acc="$path_acc/$part"
+                  fi
+                  url="$repo_url/$path_acc"
+                  if [ -z "${added_paths[$path_acc]}" ]; then
+                      echo "${indent}[[$url|$part]]" >> structure.tmp
+                      added_paths[$path_acc]=1
+                  fi
               done
           done
           echo '```' >> structure.tmp
@@ -67,7 +81,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
-          branch="auto/update-structure-$(date +%s)"
+          branch="auto/overview-$(date +%s)"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b $branch
