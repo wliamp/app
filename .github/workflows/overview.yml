@@ -13,26 +13,25 @@ permissions:
 
 jobs:
   overview:
-    if: contains(vars.INCLUDE_OVERVIEW_ACTORS, github.actor)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
-      - name: Install PyYAML (required for overview.sh)
+      - name: Install dependencies
         run: pip install pyyaml requests
 
-      - name: Generate Repo Overview
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate repository overview
         run: bash .github/scripts/overview.sh
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
 
-      - name: Commit changes if any
+      - name: Commit changes
         id: commit_changes
         run: |
           git config user.name "github-actions[bot]"
@@ -53,12 +52,10 @@ jobs:
           base: main
           title: "Overview"
           body: |
-            This pull request updates the **README.md** file with the latest automatically generated overview.
+            This PR updates README.md with the latest overview:
 
-            - 🧩 Repo structure
-            - ⚙️ Workflow summary
-            - 🔒 Ruleset overview
-
-            Please review and **squash-merge** to keep linear history clean.
+            - 🧭 Repository structure
+            - ⚙️ Branch protection rules
+            - 🚀 Workflows & actions
           commit-message: "Auto update repository overview"
           delete-branch: true
