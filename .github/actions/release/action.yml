@@ -1,6 +1,7 @@
 description: |
   - Auto-tagging from dev branch
   - Semantic versioning
+  - Ensure Release
   - Docker reproducible build
   - Security scan
   - Manual approval
@@ -40,19 +41,34 @@ runs:
         echo "✅ Version format OK: ${{ inputs.version }}"
 
     # ==========================================================
-    # 🌿 STEP 3: Ensure release branch exists
-    # If the release/<image> branch does not exist, create it from main.
+    # 🌿 STEP 3: Ensure release branch exists & sync from dev
+    # If release/<image> branch doesn't exist, create from dev.
+    # If exists, sync latest commits from origin/dev into it.
     # ==========================================================
-    - name: 🌿 Ensure Release Branch
+    - name: 🌿 Ensure & Sync Release Branch
       id: branch
       shell: bash
       run: |
+        set -e
         RELEASE_BRANCH="release/${{ inputs.image }}"
+        echo "🔍 Checking branch: $RELEASE_BRANCH"
+        git fetch origin dev --quiet
         git fetch origin "$RELEASE_BRANCH" --quiet || true
         if git rev-parse --verify "origin/$RELEASE_BRANCH" >/dev/null 2>&1; then
           echo "✅ Found existing branch: $RELEASE_BRANCH"
+          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+          echo "🔄 Merging latest dev changes into $RELEASE_BRANCH..."
+          git merge --no-edit origin/dev || true
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "📦 Push updated $RELEASE_BRANCH after sync"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git push origin "$RELEASE_BRANCH"
+          else
+            echo "✅ Release branch already up to date with dev."
+          fi
         else
-          echo "🆕 Creating new branch: $RELEASE_BRANCH"
+          echo "🆕 Creating new branch: $RELEASE_BRANCH from origin/dev"
           git checkout -b "$RELEASE_BRANCH" origin/dev
           git push origin "$RELEASE_BRANCH"
         fi
@@ -67,7 +83,7 @@ runs:
       id: tag
       shell: bash
       run: |
-        TAG="v${{ inputs.version }}"
+        TAG="${{ inputs.version }}"
         BRANCH="${{ steps.branch.outputs.branch }}"
         mkdir -p .release-log
         LOG=".release-log/tag-create.log"

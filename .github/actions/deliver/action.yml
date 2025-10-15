@@ -1,5 +1,5 @@
 description: |
-  - Tag validation (only image-version tags like <image>-vX.Y.Z allowed)
+  - Tag validation (only image-version tags like <image>-X.Y.Z allowed)
   - Docker image build and tagging
   - Image push to target registry
   - Security scan using Trivy
@@ -32,8 +32,7 @@ runs:
 
     # ==========================================================
     # 🧾 STEP 2: Validate and Parse
-    # Ensures that only properly formatted tags (e.g. auth-service-v1.2.3)
-    # can trigger the delivery pipeline.
+    # Ensures only tags like "<image>-X.Y.Z" trigger delivery.
     # ==========================================================
     - name: 🔍 Validate Branch & Parse Tag
       id: parse
@@ -45,13 +44,13 @@ runs:
           echo "❌ Branch '$BRANCH' is NOT ALLOWED for CD (Delivery)."
           exit 1
         fi
-        IMAGE="${BRANCH#release/}"
-        if [[ -z "$TAG" ]]; then
-          echo "❌ Missing tag version (expected from Git tag trigger)."
+        if [[ ! "$TAG" =~ ^([a-z0-9\-]+)-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          echo "❌ Invalid tag format. Expected: <image>-X.Y.Z (e.g. auth-service-1.2.3)"
           exit 1
         fi
-        VERSION="${TAG#v}"
-        echo "✅ Branch validation passed for $BRANCH"
+        IMAGE="${BASH_REMATCH[1]}"
+        VERSION="${BASH_REMATCH[2]}"
+        echo "✅ Tag validation passed"
         echo "🔹 Extracted IMAGE: $IMAGE"
         echo "🔹 Extracted VERSION: $VERSION"
         echo "image=$IMAGE" >> $GITHUB_OUTPUT
