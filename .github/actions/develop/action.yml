@@ -134,8 +134,10 @@ runs:
         docker build \
           --target build \
           -t ci-${{ inputs.scope }}-${{ inputs.module }}:prebuild \
-          -f ${{ inputs.scope }}/${{ inputs.module }}/Dockerfile \
-          ${{ inputs.scope }}/${{ inputs.module }}
+          -f .docker/Dockerfile \
+          --build-arg SCOPE="${{ inputs.scope }}" \
+          --build-arg MODULE="${{ inputs.module }}" \
+          .
 
     # ==========================================================
     # 🔬 STEP 11: Container image vulnerability scan

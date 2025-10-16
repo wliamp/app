@@ -8,6 +8,12 @@ description: |
   - Reporting
 
 inputs:
+  scope:
+    description: "Gradle task tier 1"
+    required: true
+  module:
+    description: "Gradle task tier 2 (belong to 'scope')"
+    required: true
   image:
     description: "Docker Image repo name"
     required: true
@@ -106,8 +112,10 @@ runs:
         docker build \
           --cache-from="$IMAGE" \
           -t "$IMAGE" \
-          -f ${{ inputs.image }}/Dockerfile \
-          ${{ inputs.image }}
+          -f .docker/Dockerfile \
+          --build-arg SCOPE="${{ inputs.scope }}" \
+          --build-arg MODULE="${{ inputs.module }}" \
+          .
         echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
     # ==========================================================
@@ -122,8 +130,10 @@ runs:
         HASH1=$(docker inspect --format='{{.Id}}' "$IMAGE")
         docker build \
           -t "$IMAGE-test" \
-          -f ${{ inputs.image }}/Dockerfile \
-          ${{ inputs.image }}
+          -f .docker/Dockerfile \
+          --build-arg SCOPE="${{ inputs.scope }}" \
+          --build-arg MODULE="${{ inputs.module }}" \
+          .
         HASH2=$(docker inspect --format='{{.Id}}' "$IMAGE-test")
         if [[ "$HASH1" != "$HASH2" ]]; then
           echo "❌ Non-deterministic build detected!"

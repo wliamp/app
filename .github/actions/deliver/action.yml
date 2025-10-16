@@ -1,5 +1,5 @@
 description: |
-  - Tag validation (only image-version tags like <image>-X.Y.Z allowed)
+  - Tag validation (only image-version tags like X.Y.Z allowed)
   - Docker image build and tagging
   - Image push to target registry
   - Security scan using Trivy
@@ -25,7 +25,7 @@ runs:
   steps:
     # ==========================================================
     # 🧾 STEP 1: Validate and Parse
-    # Ensures only tags like "<image>-X.Y.Z" trigger delivery.
+    # Ensures only tags like "X.Y.Z" trigger delivery.
     # ==========================================================
     - name: 🔍 Validate Branch & Parse Tag
       id: parse
@@ -33,21 +33,31 @@ runs:
       run: |
         BRANCH="${GITHUB_REF_NAME}"
         TAG="${GITHUB_REF#refs/tags/}"
-        if [[ ! "$BRANCH" =~ ^release/ ]]; then
-          echo "❌ Branch '$BRANCH' is NOT ALLOWED for CD (Delivery)."
+        echo "🧩 Branch: $BRANCH"
+        echo "🏷️ Tag: $TAG"
+        if [[ ! "$BRANCH" =~ ^release/([a-z0-9\-]+)/([a-z0-9\-]+)$ ]]; then
+          echo "❌ Invalid branch format. Expected: release/<scope>/<module>"
           exit 1
         fi
-        if [[ ! "$TAG" =~ ^([a-z0-9\-]+)-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-          echo "❌ Invalid tag format. Expected: <image>-X.Y.Z (e.g. auth-service-1.2.3)"
+        SCOPE="${BASH_REMATCH[1]}"
+        MODULE="${BASH_REMATCH[2]}"
+        IMAGE="${SCOPE}/${MODULE}"
+        echo "🔹 Extracted SCOPE: $SCOPE"
+        echo "🔹 Extracted MODULE: $MODULE"
+        echo "🔹 Image path: $IMAGE"
+        if [[ ! "$TAG" =~ ^([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          echo "❌ Invalid tag format. Expected: X.Y.Z (e.g. 1.2.3)"
           exit 1
         fi
-        IMAGE="${BASH_REMATCH[1]}"
-        VERSION="${BASH_REMATCH[2]}"
+        VERSION="${BASH_REMATCH[1]}"
         echo "✅ Tag validation passed"
-        echo "🔹 Extracted IMAGE: $IMAGE"
         echo "🔹 Extracted VERSION: $VERSION"
-        echo "image=$IMAGE" >> $GITHUB_OUTPUT
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        {
+          echo "scope=$SCOPE"
+          echo "module=$MODULE"
+          echo "image=$IMAGE"
+          echo "version=$VERSION"
+        } >> "$GITHUB_OUTPUT"
 
     # ==========================================================
     # 🏗️ STEP 2: Build Docker image
@@ -57,9 +67,16 @@ runs:
       shell: bash
       run: |
         IMAGE_NAME="${{ inputs.docker_repo }}/${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}"
-        PATH_DIR="${{ steps.parse.outputs.image }}"
-        echo "Building image: $IMAGE_NAME"
-        docker build -t "$IMAGE_NAME" -f "$PATH_DIR/Dockerfile" "$PATH_DIR"
+        SCOPE="${{ steps.parse.outputs.scope }}"
+        MODULE="${{ steps.parse.outputs.module }}"
+        echo "🏗️ Building Docker image: $IMAGE_NAME"
+        echo "📦 Scope: $SCOPE | Module: $MODULE"
+        docker build \
+          -t "$IMAGE_NAME" \
+          -f ".docker/Dockerfile" \
+          --build-arg SCOPE="$SCOPE" \
+          --build-arg MODULE="$MODULE" \
+          .
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
     # ==========================================================
