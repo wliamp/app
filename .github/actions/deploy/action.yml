@@ -15,12 +15,14 @@ inputs:
     description: "Repository name of the Docker image (service name)."
   image_ver:
     required: true
-    description: "Docker image version tag to deploy (e.g., 'v1.0.0' or commit SHA)."
+    description: "Docker image version tag to deploy (e.g., '1.0.0' or commit SHA)."
   staging_cluster:
     required: true
+    default: "staging_cluster"
     description: "Kubernetes context name for the Staging environment."
   prod_cluster:
     required: true
+    default: "prod_cluster"
     description: "Kubernetes context name for the Production environment."
   staging_namespace:
     required: false
@@ -39,6 +41,7 @@ inputs:
     description: "Comma-separated list of GitHub usernames authorized to approve Production rollout."
   manifests:
     required: true
+    default: "deploy/manifests"
     description: "Path to Kubernetes manifests or Helm chart directory for deployment."
   approval_timeout_minutes:
     required: false
@@ -56,14 +59,13 @@ inputs:
   grafana:
     required: false
     description: "Grafana API base URL for posting deployment annotations."
-  grafana_key:
+  grafana_token:
     required: false
-    description: "Grafana API key with write permissions for annotations."
+    description: "Grafana Account token with write permissions for annotations."
 
 runs:
   using: composite
   steps:
-
     # ==========================================================
     # ⚙️ STEP 1: Ensure environment
     # Prints out key deployment parameters for traceability,

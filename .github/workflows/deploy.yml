@@ -7,7 +7,7 @@ on:
         description: "Repository name of the Docker image (service name)."
         required: true
       ver:
-        description: "Docker image version tag to deploy (e.g., 'v1.0.0' or commit SHA)."
+        description: "Docker image version tag to deploy (e.g., '1.0.0' or commit SHA)."
         required: true
 
 jobs:
@@ -34,5 +34,4 @@ jobs:
 
         slack: ${{ secrets.SLACK_WEBHOOK_URL }}
         k8s_config: ${{ secrets.K8S_CONFIG_BASE64 }}
-        grafana_key: ${{ secrets.GRAFANA_ACCOUNT_TOKEN }}
-
+        grafana_token: ${{ secrets.GRAFANA_ACCOUNT_TOKEN }}
