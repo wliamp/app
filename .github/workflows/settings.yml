@@ -11,8 +11,7 @@ on:
 
 jobs:
   generate:
-    if: >
-      contains(vars.INCLUDE_SETTINGS_ACTORS, github.actor)
+    if: contains(vars.INCLUDE_SETTINGS_ACTORS, github.actor)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,9 +22,10 @@ jobs:
           fetch-depth: 2
           sparse-checkout: settings.gradle
 
-      - run: bash .github/scripts/settings.sh
+      - name: ⚙️ Generate structure & Helm charts
+        run: bash .shell/settings
 
-      - name: Commit and push updated files
+      - name: 💾 Commit README
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
@@ -33,13 +33,35 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add README.md deploy/ || true
-          git diff --cached --quiet && echo "No changes to commit." && exit 0
-          git commit -m "chore(root): sync Gradle structure and Helm charts"
+          git add README.md
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore(root): sync Gradle structure"
           git push origin "$branch"
           gh pr create \
-            --title "chore(root): sync Gradle structure and Helm charts" \
-            --body "This PR updates the Repository Structure in README.md and regenerates Helm charts for images." \
+            --title "chore(root): sync Gradle structure" \
+            --body "This PR updates the repository structure in README.md based on settings.gradle" \
             --base main \
             --head "$branch" \
             || echo "PR already exists"
+
+      - name: 📦 Commit & Push to Deploy repo
+        run: |
+          set -euo pipefail
+          echo "🚀 Syncing Helm charts to deployment repo..."
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+          DEPLOY_DIR="${{ runner.temp }}/java-deployment"
+          git clone --depth=1 git@github.com:wliamp/java-deployment.git "$DEPLOY_DIR"
+          cd "$DEPLOY_DIR"
+          rm -rf ./*
+          cp -r "${GITHUB_WORKSPACE}/deploy/helm/"* . || echo "⚠️ No Helm charts found to copy"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync Helm chart at $(date -u +'%Y-%m-%d %H:%M:%S')" \
+            -m "$(git diff --cached --name-status)" || echo "✅ No changes to commit"
+          git push origin main
+          echo "✅ Deploy repo updated successfully!"
+          rm -rf "$DEPLOY_DIR"
