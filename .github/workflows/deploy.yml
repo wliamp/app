@@ -21,7 +21,7 @@ jobs:
       with:
         image_repo: ${{ github.event.inputs.repo }}
         image_ver: ${{ github.event.inputs.ver }}
-        manifests: ${{ vars.K8S_MANIFESTS_BASE }}/${{ github.event.inputs.repo }}
+        charts: deploy/charts/${{ github.event.inputs.repo }}
 
         image_space: ${{ vars.DOCKERHUB_REPO }}
         approvers: ${{ vars.INCLUDE_DEPLOY_ACTORS }}

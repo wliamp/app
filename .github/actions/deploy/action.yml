@@ -39,10 +39,9 @@ inputs:
   approvers:
     required: true
     description: "Comma-separated list of GitHub usernames authorized to approve Production rollout."
-  manifests:
+  charts:
     required: true
-    default: "deploy/manifests"
-    description: "Path to Kubernetes manifests or Helm chart directory for deployment."
+    description: "Path to Helm chart directory for deployment."
   approval_timeout_minutes:
     required: false
     default: "60"
@@ -102,12 +101,12 @@ runs:
         echo "✅ kubeconfig loaded"
 
     # ==========================================================
-    # 🧩 STEP 3: Staging deployment
+    # 🧩 STEP 3: Staging deployment (Helm)
     # Switches to the staging cluster context, ensures the
-    # namespace exists, applies manifests (or Helm chart),
-    # and waits for successful rollout of the service.
+    # namespace exists, installs/updates Helm chart with
+    # dynamic image tag, and waits for rollout success.
     # ==========================================================
-    - name: 🧩 Staging deployment
+    - name: 🧩 Staging deployment (Helm)
       shell: bash
       run: |
         set -euo pipefail
@@ -115,9 +114,12 @@ runs:
         echo "🚀 Deploying '${FULL_IMAGE}' to staging context '${{ inputs.staging_cluster }}' namespace '${{ inputs.staging_namespace }}'"
         kubectl config use-context "${{ inputs.staging_cluster }}"
         kubectl get namespace "${{ inputs.staging_namespace }}" >/dev/null 2>&1 || kubectl create namespace "${{ inputs.staging_namespace }}"
-        kubectl apply -f "${{ inputs.manifests }}" -n "${{ inputs.staging_namespace }}"
-        kubectl rollout status deploy/${{ inputs.image_repo }} -n "${{ inputs.staging_namespace }}" --timeout=300s
-        echo "✅ Staging rollout finished"
+        helm upgrade --install "${{ inputs.image_repo }}" "${{ inputs.charts }}" \
+          --namespace "${{ inputs.staging_namespace }}" \
+          --set image.repository="docker.io/${{ inputs.image_space }}/${{ inputs.image_repo }}" \
+          --set image.tag="${{ inputs.image_ver }}" \
+          --wait --timeout 5m
+        echo "✅ Helm rollout to staging completed"
 
     # ==========================================================
     # 🧪 STEP 4: Health & Smoke Tests
@@ -159,12 +161,11 @@ runs:
         timeout-minutes: ${{ inputs.approval_timeout_minutes }}
 
     # ==========================================================
-    # 🧩 STEP 6: Production rollout
-    # Switches to the production cluster context, ensures
-    # namespace existence, applies manifests, and monitors
-    # rollout until completion. Timeout set to 10 minutes.
+    # 🧩 STEP 6: Production rollout (Helm)
+    # Switches to production cluster, runs helm upgrade/install
+    # with versioned image, and waits for deployment completion.
     # ==========================================================
-    - name: 🧩 Production rollout
+    - name: 🧩 Production rollout (Helm)
       shell: bash
       run: |
         set -euo pipefail
@@ -172,16 +173,18 @@ runs:
         echo "🚀 Rolling out '${FULL_IMAGE}' to production context '${{ inputs.prod_cluster }}' namespace '${{ inputs.prod_namespace }}'"
         kubectl config use-context "${{ inputs.prod_cluster }}"
         kubectl get namespace "${{ inputs.prod_namespace }}" >/dev/null 2>&1 || kubectl create namespace "${{ inputs.prod_namespace }}"
-        kubectl apply -f "${{ inputs.manifests }}" -n "${{ inputs.prod_namespace }}"
-        kubectl rollout status deploy/${{ inputs.image_repo }} -n "${{ inputs.prod_namespace }}" --timeout=600s
-        echo "✅ Production rollout completed"
+        helm upgrade --install "${{ inputs.image_repo }}" "${{ inputs.charts }}" \
+          --namespace "${{ inputs.prod_namespace }}" \
+          --set image.repository="docker.io/${{ inputs.image_space }}/${{ inputs.image_repo }}" \
+          --set image.tag="${{ inputs.image_ver }}" \
+          --wait --timeout 10m
+        echo "✅ Helm rollout to production completed"
 
     # ==========================================================
     # 📊 STEP 7: Observability & Alerts (safe)
-    # Collects recent deployment logs and checks for error
-    # patterns. Pushes metrics to Prometheus, creates
-    # Grafana annotations, and sends Slack alerts — all
-    # optional and safely skipped if configs are missing.
+    # Collects logs, pushes Prometheus metrics, creates
+    # Grafana annotations, and sends Slack notifications.
+    # All optional — skipped safely if configs missing.
     # ==========================================================
     - name: 📊 Observability & Alerts (safe)
       shell: bash
