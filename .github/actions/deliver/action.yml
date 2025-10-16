@@ -24,14 +24,7 @@ runs:
   using: composite
   steps:
     # ==========================================================
-    # 🧭 STEP 1: Checkout repository
-    # Retrieves the source code for building the Docker image.
-    # ==========================================================
-    - name: 🧩 Checkout Source Code
-      uses: actions/checkout@v4
-
-    # ==========================================================
-    # 🧾 STEP 2: Validate and Parse
+    # 🧾 STEP 1: Validate and Parse
     # Ensures only tags like "<image>-X.Y.Z" trigger delivery.
     # ==========================================================
     - name: 🔍 Validate Branch & Parse Tag
@@ -57,7 +50,7 @@ runs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
     # ==========================================================
-    # 🏗️ STEP 3: Build Docker image
+    # 🏗️ STEP 2: Build Docker image
     # Builds the Docker image using its module directory.
     # ==========================================================
     - name: 🏗️ Build Docker Image
@@ -70,7 +63,7 @@ runs:
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
     # ==========================================================
-    # 🚀 STEP 4: Push Docker image
+    # 🚀 STEP 3: Push Docker image
     # Authenticates and pushes the image to the target registry.
     # ==========================================================
     - name: 🚀 Push Docker Image
@@ -80,7 +73,7 @@ runs:
         docker push "$IMAGE_NAME"
 
     # ==========================================================
-    # 🛡️ STEP 5: Scan Docker image vulnerabilities
+    # 🛡️ STEP 4: Scan Docker image vulnerabilities
     # ==========================================================
     - name: 🛡️ Scan Docker Image (Trivy)
       uses: aquasecurity/trivy-action@0.20.0
@@ -91,7 +84,7 @@ runs:
         exit-code: 1
 
     # ==========================================================
-    # 🧾 STEP 6: Generate build report
+    # 🧾 STEP 5: Generate build report
     # ==========================================================
     - name: 🧾 Generate Delivery Report
       shell: bash
@@ -102,7 +95,7 @@ runs:
         echo "🔑 Digest: $DIGEST" >> report.txt
 
     # ==========================================================
-    # 📦 STEP 7: Upload delivery artifacts
+    # 📦 STEP 6: Upload delivery artifacts
     # ==========================================================
     - name: 📤 Upload Delivery Report
       uses: actions/upload-artifact@v4
@@ -111,7 +104,7 @@ runs:
         path: report.txt
 
     # ==========================================================
-    # 📣 STEP 8: Notify Slack channel
+    # 📣 STEP 7: Notify Slack channel
     # ==========================================================
     - name: 📣 Notify Slack (Delivery Complete)
       shell: bash

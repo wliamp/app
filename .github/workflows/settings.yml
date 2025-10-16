@@ -4,14 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths:
-      - settings.gradle
-      - settings.gradle.kts
+    paths: [ settings.gradle ]
   pull_request:
     branches: [ main ]
-    paths:
-      - settings.gradle
-      - settings.gradle.kts
+    paths: [ settings.gradle ]
 
 jobs:
   generate:
@@ -23,6 +19,9 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          sparse-checkout: settings.gradle
 
       - run: bash .github/scripts/settings.sh
 

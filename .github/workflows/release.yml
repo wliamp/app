@@ -76,6 +76,8 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/release
         with:
           image: ${{ matrix.image }}

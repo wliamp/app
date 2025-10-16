@@ -19,16 +19,7 @@ runs:
   using: composite
   steps:
     # ==========================================================
-    # 🧭 STEP 1: Checkout repository
-    # Retrieves the repository code for tagging and building operations.
-    # ==========================================================
-    - name: 🧩 Checkout Source Code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0   # required to create and push tags
-
-    # ==========================================================
-    # 🧾 STEP 2: Validate version format
+    # 🧾 STEP 1: Validate version format
     # Ensures the provided version follows semantic versioning (X.Y.Z).
     # ==========================================================
     - name: 🔍 Validate Semantic Version
@@ -41,7 +32,7 @@ runs:
         echo "✅ Version format OK: ${{ inputs.version }}"
 
     # ==========================================================
-    # 🌿 STEP 3: Ensure release branch exists & sync from dev
+    # 🌿 STEP 2: Ensure release branch exists & sync from dev
     # If release/<image> branch doesn't exist, create from dev.
     # If exists, sync latest commits from origin/dev into it.
     # ==========================================================
@@ -75,7 +66,7 @@ runs:
         echo "branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
 
     # ==========================================================
-    # 🏷️ STEP 4: Auto-create Git Tag
+    # 🏷️ STEP 3: Auto-create Git Tag
     # Automatically creates and pushes a semantic version tag to remote.
     # Used for scheduled or manual releases without human intervention.
     # ==========================================================
@@ -103,7 +94,7 @@ runs:
         echo "exists=false" >> $GITHUB_OUTPUT
 
     # ==========================================================
-    # 🐳 STEP 5: Build Docker image
+    # 🐳 STEP 4: Build Docker image
     # Builds the Docker image for the target module with caching enabled.
     # Produces a deterministic tag: ghcr.io/<owner>/<image>:<version>.
     # ==========================================================
@@ -120,7 +111,7 @@ runs:
         echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
     # ==========================================================
-    # 🧬 STEP 6: Verify reproducible build
+    # 🧬 STEP 5: Verify reproducible build
     # Rebuilds the same Docker image twice and compares their SHA IDs.
     # Ensures build reproducibility and consistency across environments.
     # ==========================================================
@@ -141,7 +132,7 @@ runs:
         echo "✅ Reproducible build confirmed"
 
     # ==========================================================
-    # 🧰 STEP 7: Initialize CodeQL (SAST)
+    # 🧰 STEP 6: Initialize CodeQL (SAST)
     # Sets up GitHub CodeQL for static application security testing.
     # ==========================================================
     - name: 🧰 Initialize CodeQL
@@ -151,7 +142,7 @@ runs:
         languages: java
 
     # ==========================================================
-    # 🧪 STEP 8: Run CodeQL analysis
+    # 🧪 STEP 7: Run CodeQL analysis
     # Executes static analysis to identify vulnerabilities in source code.
     # ==========================================================
     - name: 🔬 Analyze with CodeQL
@@ -159,7 +150,7 @@ runs:
       uses: github/codeql-action/analyze@v3
 
     # ==========================================================
-    # 🛡️ STEP 9: Container vulnerability scan
+    # 🛡️ STEP 8: Container vulnerability scan
     # Scans the built Docker image using Trivy to detect OS and library issues.
     # The pipeline fails on HIGH or CRITICAL findings.
     # ==========================================================
@@ -173,7 +164,7 @@ runs:
         exit-code: 1
 
     # ==========================================================
-    # 📊 STEP 10: Upload release log artifacts
+    # 📊 STEP 9: Upload release log artifacts
     # Publishes the release logs and tagging info as a downloadable artifact
     # for manual review and audit tracking.
     # ==========================================================

@@ -137,6 +137,14 @@ jobs:
         include: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          sparse-checkout: |
+            ${{ matrix.scope }}/${{ matrix.module }}
+            settings.gradle
+            */build.gradle
+            gradle/
+            gradlew
 
       - uses: ./.github/actions/develop
         with:
