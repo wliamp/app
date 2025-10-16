@@ -1,0 +1,46 @@
+name: Settings
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - settings.gradle
+      - settings.gradle.kts
+  pull_request:
+    branches: [ main ]
+    paths:
+      - settings.gradle
+      - settings.gradle.kts
+
+jobs:
+  generate:
+    if: >
+      contains(vars.INCLUDE_SETTINGS_ACTORS, github.actor)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: bash .github/scripts/settings.sh
+
+      - name: Commit and push updated files
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          branch="auto/settings-$(date +%s)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add README.md deploy/ || true
+          git diff --cached --quiet && echo "No changes to commit." && exit 0
+          git commit -m "chore(root): sync Gradle structure and Helm charts"
+          git push origin "$branch"
+          gh pr create \
+            --title "chore(root): sync Gradle structure and Helm charts" \
+            --body "This PR updates the Repository Structure in README.md and regenerates Helm charts for images." \
+            --base main \
+            --head "$branch" \
+            || echo "PR already exists"
