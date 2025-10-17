@@ -47,7 +47,7 @@ jobs:
       - name: 📦 Commit & Push to Deploy repo
         run: |
           set -euo pipefail
-          echo "🚀 Syncing deployment artifacts to external repo..."
+          echo "🚀 Syncing deployment artifacts and updating workflow options..."
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -55,23 +55,33 @@ jobs:
           DEPLOY_DIR="${{ runner.temp }}/java-deployment"
           git clone --depth=1 git@github.com:wliamp/java-deployment.git "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
-          for folder in charts manifests terraform; do
-            src="${GITHUB_WORKSPACE}/deploy/$folder"
-            if [ -d "$src" ]; then
+          FOLDERS=()
+          for d in "$GITHUB_WORKSPACE/deploy"/*/; do
+            [ -d "$d" ] || continue
+            FOLDERS+=("$(basename "$d")")
+          done
+          for folder in "${FOLDERS[@]}"; do
+            SRC="${GITHUB_WORKSPACE}/deploy/$folder"
+            if [ -d "$SRC" ]; then
               echo "📦 Syncing $folder..."
               rm -rf "$folder"
               mkdir -p "$folder"
-              cp -r "$src"/* "$folder"/ || echo "⚠️ No files found in $src"
-            else
-              echo "⚠️ Skip missing folder: $folder"
+              cp -r "$SRC"/* "$folder"/ || echo "⚠️ No files found in $SRC"
             fi
           done
+          WORKFLOW_FILE=".github/workflows/deploy.yml"
+          if [ -f "$WORKFLOW_FILE" ]; then
+            echo "📝 Updating workflow_dispatch mode options..."
+            OLD_OPTIONS=$(yq e '.on.workflow_dispatch.inputs.mode.options[]' "$WORKFLOW_FILE" || true)
+            ALL_OPTIONS=$(printf "%s\n%s\n" "${OLD_OPTIONS}" "${FOLDERS[@]}" | sort -u)
+            yq e -i ".on.workflow_dispatch.inputs.mode.options = [\"$(echo "${ALL_OPTIONS[@]}" | sed 's/ /\",\"/g')\"]" "$WORKFLOW_FILE"
+          else
+            echo "⚠️ Workflow file not found, skipping mode options update"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet && echo "✅ No changes to commit" && exit 0
-          git commit -m "chore: sync Image artifacts at $(date -u +'%Y-%m-%d %H:%M:%S')" \
-            -m "$(git diff --cached --name-status)"
+          git diff --cached --quiet || git commit -m "chore: sync deployment artifacts and update deploy mode options"
           git push origin main
           echo "✅ Deploy repo updated successfully!"
           rm -rf "$DEPLOY_DIR"
