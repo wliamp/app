@@ -33,3 +33,7 @@ jobs:
 
           docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
           slack: ${{ secrets.SLACK_WEBHOOK_URL }}
+          telegram_token: ${{ secrets.TELEGRAM_TOKEN }}
+          telegram: ${{ secrets.TELEGRAM_CHAT_ID }}
+          discord: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          pat: ${{ secrets.JAVA_DEPLOYMENT_PAT }}

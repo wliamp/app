@@ -4,7 +4,7 @@ description: |
   - Image push to target registry
   - Security scan using Trivy
   - Report generation and artifact upload
-  - Slack notification for delivery completion
+  - Notification for delivery completion
 
 inputs:
   scope:
@@ -28,6 +28,18 @@ inputs:
   slack:
     required: true
     description: "Incoming Slack Webhook URL used to send delivery status notifications."
+  telegram_token:
+    required: false
+    description: "Telegram bot token used for sending notifications."
+  telegram:
+    required: false
+    description: "Telegram chat/group ID to send messages to."
+  discord:
+    required: false
+    description: "Discord webhook URL to send notifications."
+  pat:
+    required: false
+    description: "GitHub Personal Access Token used for repository_dispatch events."
 
 runs:
   using: composite
@@ -90,18 +102,27 @@ runs:
     - name: 📤 Upload Delivery Report
       uses: actions/upload-artifact@v4
       with:
-        name: release-report-${{ steps.parse.outputs.image }}-${{ steps.parse.outputs.version }}
+        name: release-report-${{ inputs.scope }}-${{ inputs.module }}-${{ inputs.version }}
         path: report.txt
 
     # ==========================================================
-    # 📣 STEP 6: Notify Slack channel
+    # 📣 STEP 6: Notifications
     # ==========================================================
-    - name: 📣 Notify Slack (Delivery Complete)
+    - name: 📣 Notify (Delivery Complete)
       shell: bash
-      env:
-        WEBHOOK_URL: ${{ inputs.slack }}
       run: |
         MESSAGE="✅ CD Delivery completed successfully for tag: $GITHUB_REF_NAME"
-        MESSAGE="$MESSAGE\n📦 Image: ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}"
+        MESSAGE="$MESSAGE\n📦 Image: ${{ inputs.scope }}/${{ inputs.module }}:${{ inputs.version }}"
         curl -X POST -H "Content-Type: application/json" \
-          --data "{\"text\":\"$MESSAGE\"}" $WEBHOOK_URL
+          --data "{\"text\":\"$MESSAGE\"}" ${{ inputs.slack }}
+        curl -s -X POST "https://api.telegram.org/bot${{ inputs.telegram_token }}/sendMessage" \
+          -d "chat_id=${{ inputs.telegram }}" \
+          -d "text=$MESSAGE"
+        curl -X POST \
+          -H "Content-Type: application/json" \
+          -d "{\"content\":\"$MESSAGE\"}" ${{ inputs.discord }}
+        curl -X POST \
+          -H "Authorization: Bearer ${{ inputs.pat }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/wliamp/java-deployment/dispatches \
+          -d "{\"event_type\":\"delivery_completed\",\"client_payload\":{\"scope\":\"${{ inputs.scope }}\",\"module\":\"${{ inputs.module }}\",\"version\":\"${{ inputs.version }}\"}}"
