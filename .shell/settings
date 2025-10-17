@@ -3,7 +3,11 @@ set -euo pipefail
 README="README.md"
 TMPFILE="structure.tmp"
 TMPDIR="tmp"
-CHARTS_DIR="deploy/charts"
+COMPOSE="docker-compose.yml"
+DEPLOY_DIR="deploy"
+CHARTS_DIR="$DEPLOY_DIR/charts"
+MANIFESTS_DIR="$DEPLOY_DIR/manifests"
+TERRAFORM_DIR="$DEPLOY_DIR/terraform"
 START="<!-- START_STRUCTURE -->"
 END="<!-- END_STRUCTURE -->"
 SETTINGS_FILE=$(ls | grep -E "settings.gradle(\.kts)?$" || true)
@@ -76,18 +80,6 @@ else
   echo -e "\n$START\n$CONTENT\n$END" >> "$README"
 fi
 echo "✅ README structure updated."
-mkdir -p "$CHARTS_DIR"
-echo "🧹 [cleanup] Checking for stale charts..."
-find "$CHARTS_DIR" -mindepth 1 -type d -name "templates" -prune | while read -r chart_path; do
-  rel_path="${chart_path#$CHARTS_DIR/}"
-  rel_path="${rel_path%/templates}"
-  module="${rel_path//\//:}"
-  if [[ ! " ${MODULES[*]} " =~ " ${module} " ]]; then
-    echo "   🗑️  Removing stale image chart: ${CHARTS_DIR}/${rel_path}"
-    rm -rf "${CHARTS_DIR:?}/${rel_path}"
-  fi
-done
-echo "🎯 [filter] Selecting only level-2 modules (for image charts)..."
 LEVEL2_MODULES=()
 for m in "${MODULES[@]}"; do
   colons=$(grep -o ":" <<< "$m" | wc -l || true)
@@ -96,21 +88,31 @@ for m in "${MODULES[@]}"; do
   fi
 done
 if [ "${#LEVEL2_MODULES[@]}" -eq 0 ]; then
-  echo "⚠️  No level-2 modules found — skipping Helm image chart generation."
+  echo "⚠️  No level-2 modules found — skipping generation."
   exit 0
 fi
-echo "🚀 [generate] Creating Helm charts for ${#LEVEL2_MODULES[@]} image modules..."
+echo "🎯 Found ${#LEVEL2_MODULES[@]} deployable services."
+mkdir -p "$CHARTS_DIR"
+echo "🧹 [cleanup] Removing stale Helm charts..."
+find "$CHARTS_DIR" -mindepth 1 -type d -name "templates" -prune | while read -r chart_path; do
+  rel_path="${chart_path#$CHARTS_DIR/}"
+  rel_path="${rel_path%/templates}"
+  module="${rel_path//\//:}"
+  if [[ ! " ${LEVEL2_MODULES[*]} " =~ " ${module} " ]]; then
+    echo "   🗑️  Removing: ${CHARTS_DIR}/${rel_path}"
+    rm -rf "${CHARTS_DIR:?}/${rel_path}"
+  fi
+done
+echo "🚀 [generate] Creating Helm charts..."
 for m in "${LEVEL2_MODULES[@]}"; do
   dirpath="${m//:/\/}"
   chart_dir="${CHARTS_DIR}/${dirpath}"
-  image_path="${dirpath}"
   name="${m##*:}"
   mkdir -p "${chart_dir}/templates"
-  echo "   📦 Generating chart for image '${image_path}' → ${chart_dir}"
   cat <<EOF > "${chart_dir}/Chart.yml"
 apiVersion: v2
 name: ${name}
-description: Helm chart for Docker image '${image_path}'
+description: Helm chart for ${m}
 type: application
 version: 0.1.0
 appVersion: "latest"
@@ -118,7 +120,7 @@ EOF
   cat <<EOF > "${chart_dir}/values.yml"
 replicaCount: 1
 image:
-  repository: docker.io/\${{ vars.DOCKERHUB_REPO }}/${image_path}
+  repository: docker.io/\${{ vars.DOCKERHUB_REPO }}/${dirpath}
   tag: "latest"
   pullPolicy: IfNotPresent
 service:
@@ -160,6 +162,82 @@ spec:
     - port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.port }}
 EOF
-  echo "   ✅ Chart ready for image '${image_path}'"
 done
-echo "🎉 All done! (README + Helm Charts updated)"
+echo "✅ Helm charts ready."
+mkdir -p "$MANIFESTS_DIR"
+echo "🚀 [generate] Creating K8s manifests..."
+for m in "${LEVEL2_MODULES[@]}"; do
+  dirpath="${m//:/\/}"
+  target="${MANIFESTS_DIR}/${dirpath}"
+  mkdir -p "$target"
+  name="${m##*:}"
+  cat <<EOF > "${target}/deployment.yml"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${name}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${name}
+  template:
+    metadata:
+      labels:
+        app: ${name}
+    spec:
+      containers:
+        - name: ${name}
+          image: docker.io/\${{ vars.DOCKERHUB_REPO }}/${dirpath}:latest
+          ports:
+            - containerPort: 8080
+EOF
+  cat <<EOF > "${target}/service.yml"
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+spec:
+  type: ClusterIP
+  selector:
+    app: ${name}
+  ports:
+    - port: 8080
+      targetPort: 8080
+EOF
+done
+echo "✅ K8s manifests ready."
+echo "🚀 [generate] Creating Docker Compose..."
+{
+  echo "version: '3.8'"
+  echo "services:"
+  for m in "${LEVEL2_MODULES[@]}"; do
+    dirpath="${m//:/\/}"
+    name="${m##*:}"
+    echo "  ${name}:"
+    echo "    image: docker.io/\${DOCKERHUB_REPO}/${dirpath}:latest"
+    echo "    ports:"
+    echo "      - \"8080:8080\""
+  done
+} > "$COMPOSE"
+echo "✅ Docker Compose ready."
+mkdir -p "$TERRAFORM_DIR"
+echo "🚀 [generate] Creating Terraform skeleton..."
+for m in "${LEVEL2_MODULES[@]}"; do
+  dirpath="${m//:/\/}"
+  tf_dir="${TERRAFORM_DIR}/${dirpath}"
+  mkdir -p "$tf_dir"
+  name="${m##*:}"
+  cat <<EOF > "${tf_dir}/main.tf"
+resource "kubernetes_deployment" "${name}" {
+  metadata {
+    name = "${name}"
+  }
+  spec {
+    replicas = 1
+  }
+}
+EOF
+done
+echo "✅ Terraform skeleton ready."
+echo "🎉 All done! (README + Helm + Manifests + Compose + Terraform updated)"

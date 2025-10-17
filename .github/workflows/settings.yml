@@ -25,7 +25,7 @@ jobs:
       - name: ⚙️ Generate structure & Helm charts
         run: bash .shell/settings
 
-      - name: 💾 Commit README
+      - name: 💾 Commit README & Compose
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
@@ -33,13 +33,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add README.md
+          git add README.md docker-compose.yml
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore(root): sync Gradle structure"
+          git commit -m "chore(root): sync Gradle structure + Compose artifacts"
           git push origin "$branch"
           gh pr create \
             --title "chore(root): sync Gradle structure" \
-            --body "This PR updates the repository structure in README.md based on settings.gradle" \
+            --body "This PR updates the repository structure in README.md and Compose artifacts for dev/test in docker-compose.yml based on settings.gradle" \
             --base main \
             --head "$branch" \
             || echo "PR already exists"
@@ -47,7 +47,7 @@ jobs:
       - name: 📦 Commit & Push to Deploy repo
         run: |
           set -euo pipefail
-          echo "🚀 Syncing Helm charts to deployment repo..."
+          echo "🚀 Syncing deployment artifacts to external repo..."
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
@@ -55,13 +55,23 @@ jobs:
           DEPLOY_DIR="${{ runner.temp }}/java-deployment"
           git clone --depth=1 git@github.com:wliamp/java-deployment.git "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
-          rm -rf ./*
-          cp -r "${GITHUB_WORKSPACE}/deploy/helm/"* . || echo "⚠️ No Helm charts found to copy"
+          for folder in charts manifests terraform; do
+            src="${GITHUB_WORKSPACE}/deploy/$folder"
+            if [ -d "$src" ]; then
+              echo "📦 Syncing $folder..."
+              rm -rf "$folder"
+              mkdir -p "$folder"
+              cp -r "$src"/* "$folder"/ || echo "⚠️ No files found in $src"
+            else
+              echo "⚠️ Skip missing folder: $folder"
+            fi
+          done
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Sync Helm chart at $(date -u +'%Y-%m-%d %H:%M:%S')" \
-            -m "$(git diff --cached --name-status)" || echo "✅ No changes to commit"
+          git diff --cached --quiet && echo "✅ No changes to commit" && exit 0
+          git commit -m "chore: sync Image artifacts at $(date -u +'%Y-%m-%d %H:%M:%S')" \
+            -m "$(git diff --cached --name-status)"
           git push origin main
           echo "✅ Deploy repo updated successfully!"
           rm -rf "$DEPLOY_DIR"
