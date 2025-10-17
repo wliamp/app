@@ -1,5 +1,4 @@
 description: |
-  - Branch validation
   - Dependency caching
   - Static & Security analysis
   - Testing & Building
@@ -19,22 +18,7 @@ runs:
   using: composite
   steps:
     # ==========================================================
-    # 🧭 STEP 1: Validate branch naming convention
-    # Ensures that only allowed branches (main, release/*, feature/*, bugfix/*)
-    # can trigger CI to maintain consistent workflow rules.
-    # ==========================================================
-    - name: 🔍 Validate Branch Naming
-      shell: bash
-      run: |
-        BRANCH="${GITHUB_REF#refs/heads/}"
-        if [[ ! "$BRANCH" =~ ^(main|release/.*|feature/.*|bugfix/.*)$ ]]; then
-          echo "❌ Branch '$BRANCH' is NOT ALLOWED for CI (DEVELOPMENT)."
-          exit 1
-        fi
-        echo "✅ Branch validation passed for $BRANCH"
-
-    # ==========================================================
-    # ☕ STEP 2: Setup Java environment
+    # ☕ STEP 1: Setup Java environment
     # Sets up Temurin JDK 25 for Gradle build and test execution.
     # ==========================================================
     - name: ⚙️ Setup Java 25 (Temurin)
@@ -44,7 +28,7 @@ runs:
         distribution: 'temurin'
 
     # ==========================================================
-    # 🚀 STEP 3: Restore Gradle cache
+    # 🚀 STEP 2: Restore Gradle cache
     # Restores previously cached Gradle dependencies and wrapper
     # to speed up build times and reduce redundant downloads.
     # ==========================================================
@@ -59,7 +43,7 @@ runs:
           ${{ runner.os }}-gradle-
 
     # ==========================================================
-    # 🔍 STEP 4: Static code analysis
+    # 🔍 STEP 3: Static code analysis
     # Runs Gradle `check` task (includes lint, static analysis, etc.)
     # to detect style and potential issues early.
     # ==========================================================
@@ -68,7 +52,7 @@ runs:
       run: ./gradlew :${{ inputs.scope }}:${{ inputs.module }}:check
 
     # ==========================================================
-    # 🛡️ STEP 5: Dependency vulnerability scan
+    # 🛡️ STEP 4: Dependency vulnerability scan
     # Uses Anchore to scan dependencies for known vulnerabilities.
     # Build will fail on findings with severity ≥ HIGH.
     # ==========================================================
@@ -80,7 +64,7 @@ runs:
         severity-cutoff: high
 
     # ==========================================================
-    # 🧪 STEP 6: Run tests and build module
+    # 🧪 STEP 5: Run tests and build module
     # Executes unit tests, integration tests, and generates coverage report.
     # ==========================================================
     - name: 🧪 Test, Build & Coverage
@@ -90,7 +74,7 @@ runs:
       run: ./gradlew :${{ inputs.scope }}:${{ inputs.module }}:clean build jacocoTestReport
 
     # ==========================================================
-    # 📊 STEP 7: Upload test report artifact
+    # 📊 STEP 6: Upload test report artifact
     # Stores test result reports as GitHub Action artifacts for later review.
     # ==========================================================
     - name: 📤 Upload Test Report
@@ -100,7 +84,7 @@ runs:
         path: ${{ inputs.scope }}/${{ inputs.module }}/build/reports/tests/test
 
     # ==========================================================
-    # 📈 STEP 8: Upload code coverage report
+    # 📈 STEP 7: Upload code coverage report
     # Publishes generated JaCoCo coverage report as build artifact.
     # ==========================================================
     - name: 📤 Upload Coverage Report
@@ -110,7 +94,7 @@ runs:
         path: ${{ inputs.scope }}/${{ inputs.module }}/build/reports/jacoco/test/html
 
     # ==========================================================
-    # 🔄 STEP 9: Aggregate validation
+    # 🔄 STEP 8: Aggregate validation
     # Checks if the latest commit introduces relevant changes (excluding docs).
     # Skips heavy downstream jobs when no code changes are detected.
     # ==========================================================
@@ -124,7 +108,7 @@ runs:
         fi
 
     # ==========================================================
-    # 🧱 STEP 10: Pre-build Docker image (build stage only)
+    # 🧱 STEP 9: Pre-build Docker image (build stage only)
     # Builds an intermediate image targeting the 'build' stage to validate
     # Dockerfile integrity and dependencies without producing the final artifact.
     # ==========================================================
@@ -140,7 +124,7 @@ runs:
           .
 
     # ==========================================================
-    # 🔬 STEP 11: Container image vulnerability scan
+    # 🔬 STEP 10: Container image vulnerability scan
     # Scans the pre-built Docker image for OS and dependency vulnerabilities
     # using Trivy, failing on HIGH or CRITICAL findings.
     # ==========================================================

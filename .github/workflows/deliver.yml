@@ -11,13 +11,23 @@ jobs:
     if: >
       !contains(vars.EXCLUDE_DELIVER_ACTORS, github.actor)
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - uses: ./.github/actions/deliver
+      - id: parse
+        name: 🔍 Parse Branch and Tag
+        run: bash .shell/deliver
+
+      - name: 🚀 Deliver
+        uses: ./.github/actions/deliver
         with:
+          scope: ${{ steps.parse.outputs.scope }}
+          module: ${{ steps.parse.outputs.module }}
+          version: ${{ steps.parse.outputs.version }}
+
           docker_user: ${{ vars.DOCKERHUB_USER }}
           docker_repo: ${{ vars.DOCKERHUB_REPO }}
 

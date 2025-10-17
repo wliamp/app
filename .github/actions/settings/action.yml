@@ -1,0 +1,71 @@
+description: "Commit README, Compose, and sync to deployment repo"
+
+inputs:
+  pat:
+    required: true
+    description: "Personal Access Token"
+  key:
+    required: true
+    description: "Deploy Key"
+
+runs:
+  using: composite
+  steps:
+    - name: 💾 Commit README & Compose
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.pat }}
+      run: |
+        set -euo pipefail
+        branch="auto/settings-$(date +%s)"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git checkout -b "$branch"
+        git add README.md docker-compose.yml
+        git diff --cached --quiet && echo "No changes to commit" && exit 0
+        git commit -m "chore(root): sync Gradle structure + Compose artifacts"
+        git push origin "$branch"
+        gh pr create \
+          --title "chore(root): sync Gradle structure" \
+          --body "Auto-sync based on settings.gradle." \
+          --base main \
+          --head "$branch" || echo "PR already exists"
+
+    - name: 📦 Commit & Push to Deploy repo
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "🚀 Syncing deployment artifacts..."
+        mkdir -p ~/.ssh
+        echo "${{ inputs.key }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+        DEPLOY_DIR="${{ runner.temp }}/java-deployment"
+        git clone --depth=1 git@github.com:wliamp/java-deployment.git "$DEPLOY_DIR"
+        cd "$DEPLOY_DIR"
+        FOLDERS=()
+        for d in "$GITHUB_WORKSPACE/deploy"/*/; do
+          [ -d "$d" ] || continue
+          FOLDERS+=("$(basename "$d")")
+        done
+        for folder in "${FOLDERS[@]}"; do
+          SRC="${GITHUB_WORKSPACE}/deploy/$folder"
+          if [ -d "$SRC" ]; then
+            echo "📦 Syncing $folder..."
+            rm -rf "$folder"
+            mkdir -p "$folder"
+            cp -r "$SRC"/* "$folder"/ || echo "⚠️ No files in $SRC"
+          fi
+        done
+        WORKFLOW_FILE=".github/workflows/deploy.yml"
+        if [ -f "$WORKFLOW_FILE" ]; then
+          echo "📝 Updating workflow_dispatch options..."
+          OLD=$(yq e '.on.workflow_dispatch.inputs.mode.options[]' "$WORKFLOW_FILE" || true)
+          ALL=$(printf "%s\n%s\n" "${OLD}" "${FOLDERS[@]}" | sort -u)
+          yq e -i ".on.workflow_dispatch.inputs.mode.options = [\"$(echo "${ALL[@]}" | sed 's/ /\",\"/g')\"]" "$WORKFLOW_FILE"
+        fi
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add -A
+        git diff --cached --quiet || git commit -m "chore: sync deployment artifacts"
+        git push origin main

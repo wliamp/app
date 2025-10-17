@@ -1,0 +1,22 @@
+#!/bin/bash
+set -euo pipefail
+BRANCH="${GITHUB_REF_NAME}"
+TAG="${GITHUB_REF#refs/tags/}"
+echo "🧩 Branch: $BRANCH"
+echo "🏷️ Tag: $TAG"
+if [[ ! "$BRANCH" =~ ^release/([a-z0-9\-]+)/([a-z0-9\-]+)$ ]]; then
+  echo "❌ Invalid branch format. Expected: release/<scope>/<module>"
+  exit 1
+fi
+SCOPE="${BASH_REMATCH[1]}"
+MODULE="${BASH_REMATCH[2]}"
+if [[ ! "$TAG" =~ ^([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+  echo "❌ Invalid tag format. Expected: X.Y.Z (e.g. 1.2.3)"
+  exit 1
+fi
+VERSION="${BASH_REMATCH[1]}"
+{
+  echo "scope=$SCOPE"
+  echo "module=$MODULE"
+  echo "version=$VERSION"
+} >> "$GITHUB_OUTPUT"

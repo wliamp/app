@@ -8,125 +8,18 @@ on:
 
 jobs:
   detect-changes:
-    # ==========================================================
-    # 🔍 JOB: Detect Changed Modules (auto-discovery version)
-    #
-    #   1) If changes include any root-level files (files with no '/'), treat
-    #      as a repository-wide change -> build ALL modules.
-    #
-    #   2) If changes live under <scope>/ but not under a specific module,
-    #      build all modules under that scope.
-    #
-    #   3) If changes live under <scope>/<module>/, only build that module.
-    # ==========================================================
     if: >
       !contains(vars.EXCLUDE_DEVELOP_ACTORS, github.actor)
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.prepare.outputs.matrix }}
+      matrix: ${{ steps.detect.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
-      # ==========================================================
-      # 🧭 STEP 1: Discover all modules dynamically
-      #
-      #   - Uses `find` to locate files named `build.gradle*` at depth 2 (i.e. <scope>/<module>/build.gradle*).
-      #
-      #   - Normalizes paths to remove leading ./ and the build file suffix to produce lines like:
-      #       core/auth
-      #       infra/gateway
-      #
-      #   - Converts that list into a JSON array of objects:
-      #       [{ "scope": "core", "module": "auth" }, ...]
-      # ==========================================================
-      - id: discover
-        run: |
-          echo "🔍 Scanning repo for modules..."
-          find . -mindepth 2 -maxdepth 2 -type f -name "build.gradle*" \
-            | sed 's|^\./||; s|/build.gradle.*||' \
-            | sort > /tmp/all_modules.txt
-          jq -R -s -c 'split("\n")[:-1] | map(split("/")) | map({scope:.[0], module:.[1]})' /tmp/all_modules.txt > /tmp/all_modules.json
-          echo "::notice::Discovered modules:"
-          cat /tmp/all_modules.json | jq .
-          echo "all_modules=$(cat /tmp/all_modules.json)" >> $GITHUB_OUTPUT
-
-      # ==========================================================
-      # 🧮 STEP 2: Determine what changed in this push/PR
-      #
-      #   - Computes a base commit using `git merge-base origin/dev HEAD`.
-      #
-      #   - If no base exists (first commit, shallow clone or other edge cases), assume root-level change.
-      #
-      #   - Otherwise, lists changed files (one-per-line) and writes them to /tmp/changed.txt.
-      #
-      #   - Detects if any changed path is root-level (no slashes).
-      # ==========================================================
       - id: detect
-        run: |
-          base=$(git merge-base origin/dev HEAD || echo "")
-          if [[ -z "$base" ]]; then
-            echo "::warning::No base branch found → assuming full build"
-            echo "level=root" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          git diff --name-only "$base" HEAD > /tmp/changed.txt
-          echo "::notice::Changed files:"
-          sed 's/^/  - /' /tmp/changed.txt || true
-          if grep -qE '^[^/]+$' /tmp/changed.txt; then
-            echo "level=root" >> $GITHUB_OUTPUT
-            echo "::warning::Root-level change detected → full CI mode"
-          else
-            echo "level=module" >> $GITHUB_OUTPUT
-          fi
-
-      # ==========================================================
-      # 🧠 STEP 3: Compute affected scope/module matrix
-      #
-      #   - If level == root: matrix = all discovered modules (full build).
-      #
-      #   - Else:
-      #       * Extract the unique changed scopes (first path segment).
-      #       * Extract the unique changed scope/module paths (first two segments).
-      #       * Select all discovered modules where:
-      #           - the module's scope is in changed scopes, OR
-      #           - the module's scope/module pair is explicitly changed.
-      # ==========================================================
-      - id: prepare
-        run: |
-          level="${{ steps.detect.outputs.level }}"
-          all=$(cat /tmp/all_modules.json)
-          if [[ "$level" == "root" ]]; then
-            echo "::notice::Root-level change → use full matrix"
-            matrix="$all"
-          else
-            echo "::notice::Analyzing changed scopes/modules..."
-            awk -F'/' '{print $1}' /tmp/changed.txt | sort -u > /tmp/scopes.txt
-            awk -F'/' '{print $1"/"$2}' /tmp/changed.txt | sort -u > /tmp/paths.txt
-            matrix=$(jq -c \
-              --argjson all "$all" \
-              --argjson scopes "$(jq -R -s 'split("\n")[:-1]' < /tmp/scopes.txt)" \
-              --argjson mods "$(jq -R -s 'split("\n")[:-1]' < /tmp/paths.txt)" '
-              [ $all[] | select(
-                  ($scopes | index(.scope))
-                  or
-                  ($mods | index((.scope + "/" + .module)))
-                ) ]')
-            if [[ "$(jq length <<< "$matrix")" -eq 0 ]]; then
-              echo "::warning::No module match found → full build"
-              matrix="$all"
-            fi
-          fi
-          echo "matrix=$matrix" >> $GITHUB_OUTPUT
-          echo "::notice::Final build matrix:"
-          echo "$matrix" | jq .
-
-      # ==========================================================
-      # 🧹 STEP 4: Cleanup
-      # ==========================================================
-      - if: always()
-        run: |
-          rm -f /tmp/*.txt /tmp/*.json || true
-          echo "::notice::Temporary files cleaned."
+        run: bash .shell/develop
 
   develop:
     needs: detect-changes

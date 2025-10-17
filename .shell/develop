@@ -1,0 +1,59 @@
+#!/bin/bash
+set -euo pipefail
+BRANCH="${GITHUB_REF#refs/heads/}"
+if [[ ! "$BRANCH" =~ ^(main|release/.*|feature/.*|bugfix/.*)$ ]]; then
+  echo "❌ Branch '$BRANCH' is NOT ALLOWED for CI (DEVELOPMENT)."
+  exit 1
+fi
+echo "✅ Branch validation passed for $BRANCH"
+WORKDIR=$(pwd)
+TMP_DIR=$(mktemp -d)
+echo "🔍 Scanning repo for modules..."
+find . -mindepth 2 -maxdepth 2 -type f -name "build.gradle*" \
+  | sed 's|^\./||; s|/build.gradle.*||' \
+  | sort > "$TMP_DIR/all_modules.txt"
+jq -R -s -c 'split("\n")[:-1] | map(split("/")) | map({scope:.[0], module:.[1]})' \
+  "$TMP_DIR/all_modules.txt" > "$TMP_DIR/all_modules.json"
+echo "🧾 All modules discovered:"
+cat "$TMP_DIR/all_modules.json" | jq .
+base=$(git merge-base origin/dev HEAD || echo "")
+if [[ -z "$base" ]]; then
+  echo "::warning::No base branch found → full build"
+  level="root"
+else
+  git diff --name-only "$base" HEAD > "$TMP_DIR/changed.txt"
+  echo "📝 Changed files:"
+  sed 's/^/  - /' "$TMP_DIR/changed.txt" || true
+  if grep -qE '^[^/]+$' "$TMP_DIR/changed.txt"; then
+    level="root"
+    echo "::warning::Root-level change detected → full build"
+  else
+    level="module"
+  fi
+fi
+all=$(cat "$TMP_DIR/all_modules.json")
+if [[ "$level" == "root" ]]; then
+  matrix="$all"
+else
+  echo "🧠 Analyzing changed scopes/modules..."
+  awk -F'/' '{print $1}' "$TMP_DIR/changed.txt" | sort -u > "$TMP_DIR/scopes.txt"
+  awk -F'/' '{print $1"/"$2}' "$TMP_DIR/changed.txt" | sort -u > "$TMP_DIR/paths.txt"
+  matrix=$(jq -c \
+    --argjson all "$all" \
+    --argjson scopes "$(jq -R -s 'split("\n")[:-1]' < "$TMP_DIR/scopes.txt")" \
+    --argjson mods "$(jq -R -s 'split("\n")[:-1]' < "$TMP_DIR/paths.txt")" '
+    [ $all[] | select(
+        ($scopes | index(.scope))
+        or
+        ($mods | index((.scope + "/" + .module)))
+      ) ]')
+  if [[ "$(jq length <<< "$matrix")" -eq 0 ]]; then
+    echo "::warning::No module match found → full build"
+    matrix="$all"
+  fi
+fi
+echo "✅ Final matrix:"
+echo "$matrix" | jq .
+echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+rm -rf "$TMP_DIR"
+echo "::notice::Temporary files cleaned."

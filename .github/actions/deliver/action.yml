@@ -7,6 +7,15 @@ description: |
   - Slack notification for delivery completion
 
 inputs:
+  scope:
+    required: true
+    description: "Gradle Task tier 1."
+  module:
+    required: true
+    description: "Gradle Task tier 2 (belong to 'scope')."
+  version:
+    required: true
+    description: "Docker Image version"
   docker_user:
     required: true
     description: "Username or service account used to authenticate to the Docker registry."
@@ -24,51 +33,15 @@ runs:
   using: composite
   steps:
     # ==========================================================
-    # 🧾 STEP 1: Validate and Parse
-    # Ensures only tags like "X.Y.Z" trigger delivery.
-    # ==========================================================
-    - name: 🔍 Validate Branch & Parse Tag
-      id: parse
-      shell: bash
-      run: |
-        BRANCH="${GITHUB_REF_NAME}"
-        TAG="${GITHUB_REF#refs/tags/}"
-        echo "🧩 Branch: $BRANCH"
-        echo "🏷️ Tag: $TAG"
-        if [[ ! "$BRANCH" =~ ^release/([a-z0-9\-]+)/([a-z0-9\-]+)$ ]]; then
-          echo "❌ Invalid branch format. Expected: release/<scope>/<module>"
-          exit 1
-        fi
-        SCOPE="${BASH_REMATCH[1]}"
-        MODULE="${BASH_REMATCH[2]}"
-        IMAGE="${SCOPE}/${MODULE}"
-        echo "🔹 Extracted SCOPE: $SCOPE"
-        echo "🔹 Extracted MODULE: $MODULE"
-        echo "🔹 Image path: $IMAGE"
-        if [[ ! "$TAG" =~ ^([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-          echo "❌ Invalid tag format. Expected: X.Y.Z (e.g. 1.2.3)"
-          exit 1
-        fi
-        VERSION="${BASH_REMATCH[1]}"
-        echo "✅ Tag validation passed"
-        echo "🔹 Extracted VERSION: $VERSION"
-        {
-          echo "scope=$SCOPE"
-          echo "module=$MODULE"
-          echo "image=$IMAGE"
-          echo "version=$VERSION"
-        } >> "$GITHUB_OUTPUT"
-
-    # ==========================================================
-    # 🏗️ STEP 2: Build Docker image
+    # 🏗️ STEP 1: Build Docker image
     # Builds the Docker image using its module directory.
     # ==========================================================
     - name: 🏗️ Build Docker Image
       shell: bash
       run: |
-        IMAGE_NAME="${{ inputs.docker_repo }}/${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}"
-        SCOPE="${{ steps.parse.outputs.scope }}"
-        MODULE="${{ steps.parse.outputs.module }}"
+        IMAGE_NAME="${{ inputs.docker_repo }}/${{ inputs.scope }}/${{ inputs.module }}:${{ inputs.version }}"
+        SCOPE="${{ inputs.scope }}"
+        MODULE="${{ inputs.module }}"
         echo "🏗️ Building Docker image: $IMAGE_NAME"
         echo "📦 Scope: $SCOPE | Module: $MODULE"
         docker build \
@@ -80,7 +53,7 @@ runs:
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
     # ==========================================================
-    # 🚀 STEP 3: Push Docker image
+    # 🚀 STEP 2: Push Docker image
     # Authenticates and pushes the image to the target registry.
     # ==========================================================
     - name: 🚀 Push Docker Image
@@ -90,7 +63,7 @@ runs:
         docker push "$IMAGE_NAME"
 
     # ==========================================================
-    # 🛡️ STEP 4: Scan Docker image vulnerabilities
+    # 🛡️ STEP 3: Scan Docker image vulnerabilities
     # ==========================================================
     - name: 🛡️ Scan Docker Image (Trivy)
       uses: aquasecurity/trivy-action@0.20.0
@@ -101,7 +74,7 @@ runs:
         exit-code: 1
 
     # ==========================================================
-    # 🧾 STEP 5: Generate build report
+    # 🧾 STEP 4: Generate build report
     # ==========================================================
     - name: 🧾 Generate Delivery Report
       shell: bash
@@ -112,7 +85,7 @@ runs:
         echo "🔑 Digest: $DIGEST" >> report.txt
 
     # ==========================================================
-    # 📦 STEP 6: Upload delivery artifacts
+    # 📦 STEP 5: Upload delivery artifacts
     # ==========================================================
     - name: 📤 Upload Delivery Report
       uses: actions/upload-artifact@v4
@@ -121,7 +94,7 @@ runs:
         path: report.txt
 
     # ==========================================================
-    # 📣 STEP 7: Notify Slack channel
+    # 📣 STEP 6: Notify Slack channel
     # ==========================================================
     - name: 📣 Notify Slack (Delivery Complete)
       shell: bash
