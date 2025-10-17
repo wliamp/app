@@ -27,5 +27,5 @@ jobs:
 
       - uses: ./.github/actions/settings
         with:
-          pat: ${{ secrets.PAT }}
-          key: ${{ secrets.DEPLOY_KEY }}
+          pat: ${{ secrets.JAVA_PAT }}
+          key: ${{ secrets.JAVA_DEPLOYMENT_DK }}

@@ -36,4 +36,4 @@ jobs:
           module: ${{ matrix.module }}
           image: ${{ matrix.image }}
           version: ${{ matrix.version }}
-          key: ${{ secrets.TAG_DEPLOY_KEY }}
+          key: ${{ secrets.TAG_MANAGE_DK }}
