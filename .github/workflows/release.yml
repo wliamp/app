@@ -1,9 +1,9 @@
 name: Release
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "0 0 * * 1" # 0h UTC Monday Weekly
-  workflow_dispatch:
 
 jobs:
   resolve-version:
@@ -36,3 +36,4 @@ jobs:
           module: ${{ matrix.module }}
           image: ${{ matrix.image }}
           version: ${{ matrix.version }}
+          key: ${{ secrets.TAG_DEPLOY_KEY }}

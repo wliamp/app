@@ -20,6 +20,9 @@ inputs:
   version:
     description: "Target semantic version"
     required: true
+  key:
+    description: "Tags manager Deploy key"
+    required: true
 
 runs:
   using: composite
@@ -45,8 +48,8 @@ runs:
           git merge --no-edit origin/dev || true
           if [[ -n "$(git status --porcelain)" ]]; then
             echo "📦 Push updated $RELEASE_BRANCH after sync"
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "release[bot]"
+            git config user.email "release[bot]@users.noreply.github.com"
             git push origin "$RELEASE_BRANCH"
           else
             echo "✅ Release branch already up to date with dev."
@@ -78,11 +81,16 @@ runs:
           echo "exists=true" >> $GITHUB_OUTPUT
           exit 0
         fi
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
+        echo "🔑 Configuring SSH Deploy Key..."
+        mkdir -p ~/.ssh
+        echo "${{ inputs.key }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        git config user.name "release[bot]"
+        git config user.email "release[bot]@users.noreply.github.com"
         git checkout "$BRANCH"
         git tag -a "$TAG" -m "Automated release $TAG for ${{ inputs.image }}"
-        git push origin "$TAG"
+        git push git@github.com:${{ github.repository }} "$TAG"
         echo "✅ Created and pushed tag: $TAG on $BRANCH" | tee -a "$LOG"
         echo "exists=false" >> $GITHUB_OUTPUT
 
