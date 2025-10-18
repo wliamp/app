@@ -89,17 +89,22 @@ runs:
     # 🧾 STEP 4: Generate build report
     # ==========================================================
     - name: 🧾 Generate Delivery Report
+      if: ${{ always() }}
       shell: bash
       run: |
-        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_NAME")
+        DIGEST=$(docker images --digests --format "{{.Digest}}" | head -n1 || echo "N/A")
         echo "DIGEST=$DIGEST" >> $GITHUB_ENV
-        echo "✅ Build completed for $IMAGE_NAME" > report.txt
-        echo "🔑 Digest: $DIGEST" >> report.txt
+        echo "🧾 Delivery Report" > report.txt
+        echo "Status: ${{ job.status }}" >> report.txt
+        echo "Image: $IMAGE_NAME" >> report.txt
+        echo "Digest: $DIGEST" >> report.txt
+        echo "Ref: $GITHUB_REF_NAME" >> report.txt
 
     # ==========================================================
     # 📦 STEP 5: Upload delivery artifacts
     # ==========================================================
     - name: 📤 Upload Delivery Report
+      if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
         name: release-report-${{ inputs.scope }}-${{ inputs.module }}-${{ inputs.version }}
@@ -109,20 +114,37 @@ runs:
     # 📣 STEP 6: Notifications
     # ==========================================================
     - name: 📣 Notify (Delivery Complete)
+      if: ${{ always() }}
       shell: bash
       run: |
-        MESSAGE="✅ CD Delivery completed successfully for tag: $GITHUB_REF_NAME"
-        MESSAGE="$MESSAGE\n📦 Image: ${{ inputs.scope }}/${{ inputs.module }}:${{ inputs.version }}"
+        STATUS="${{ job.status }}"
+        SCOPE="${{ inputs.scope }}"
+        MODULE="${{ inputs.module }}"
+        VERSION="${{ inputs.version }}"
+        if [ "$STATUS" = "success" ]; then
+          MESSAGE="✅ *Delivery completed successfully* for tag: $GITHUB_REF_NAME"
+          MESSAGE="$MESSAGE\n📦 Image: ${SCOPE}/${MODULE}:${VERSION}"
+          MESSAGE="$MESSAGE\n🔑 Digest: ${DIGEST:-N/A}"
+        else
+          MESSAGE="❌ *Delivery failed* for tag: $GITHUB_REF_NAME"
+          MESSAGE="$MESSAGE\n🧩 Scope: ${SCOPE} | Module: ${MODULE}"
+        fi
+        echo "🔔 Sending notifications..."
         curl -X POST -H "Content-Type: application/json" \
-          --data "{\"text\":\"$MESSAGE\"}" ${{ inputs.slack }}
+          --data "{\"text\":\"$MESSAGE\"}" ${{ inputs.slack }} || true
         curl -s -X POST "https://api.telegram.org/bot${{ inputs.telegram_token }}/sendMessage" \
           -d "chat_id=${{ inputs.telegram }}" \
-          -d "text=$MESSAGE"
+          -d "text=$MESSAGE" || true
         curl -X POST \
           -H "Content-Type: application/json" \
-          -d "{\"content\":\"$MESSAGE\"}" ${{ inputs.discord }}
-        curl -X POST \
-          -H "Authorization: Bearer ${{ inputs.pat }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/wliamp/java-deployment/dispatches \
-          -d "{\"event_type\":\"delivery_completed\",\"client_payload\":{\"scope\":\"${{ inputs.scope }}\",\"module\":\"${{ inputs.module }}\",\"version\":\"${{ inputs.version }}\"}}"
+          -d "{\"content\":\"$MESSAGE\"}" ${{ inputs.discord }} || true
+        if [ "$STATUS" = "success" ]; then
+          echo "🚀 Triggering downstream repository..."
+          curl -X POST \
+            -H "Authorization: Bearer ${{ inputs.pat }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/wliamp/java-deployment/dispatches \
+            -d "{\"event_type\":\"delivery_completed\",\"client_payload\":{\"scope\":\"${SCOPE}\",\"module\":\"${MODULE}\",\"version\":\"${VERSION}\"}}"
+        else
+          echo "⚠️ Job failed, skipping downstream trigger."
+        fi
