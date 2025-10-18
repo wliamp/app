@@ -1,16 +1,27 @@
-description: "Commit README, Compose, and sync to deployment repo"
+description: |
+  - Detects and commits any updates to README and docker-compose files, then opens a Pull Request.
+  - Mirrors the latest deployment artifacts into a dedicated deployment repository.
 
 inputs:
   pat:
     required: true
-    description: "Personal Access Token"
+    description: "GitHub Personal Access Token (PAT) used for authentication with GitHub CLI when creating Pull Requests."
   key:
     required: true
-    description: "Deploy Key"
+    description: "SSH Deploy Key granting write access to the external deployment repository."
 
 runs:
   using: composite
   steps:
+    # =============================================================
+    # Step 1: Detect and push README/Compose changes
+    #
+    # - Creates a new temporary branch for settings or Compose updates.
+    # - Configures a bot identity for automated commits.
+    # - Commits README.md and docker-compose.yml only if changes are detected.
+    # - Pushes the branch and opens a Pull Request targeting 'main'.
+    # - Avoids duplication if a similar PR already exists.
+    # =============================================================
     - name: 💾 Commit README & Compose
       shell: bash
       env:
@@ -31,6 +42,16 @@ runs:
           --base main \
           --head "$branch" || echo "PR already exists"
 
+    # =============================================================
+    # Step 2: Sync deployment artifacts to external Deploy repo
+    #
+    # - Authenticates via SSH Deploy Key to access 'java-deployment' repository.
+    # - Clones the repo into a temporary workspace.
+    # - Iterates through all folders under ./deploy in the source repository.
+    # - Replaces corresponding folders in the Deploy repo with updated artifacts.
+    # - Commits only if actual changes exist, avoiding redundant commits.
+    # - Pushes updates directly to the 'main' branch of the Deploy repository.
+    # =============================================================
     - name: 📦 Commit & Push to Deploy repo
       shell: bash
       run: |
