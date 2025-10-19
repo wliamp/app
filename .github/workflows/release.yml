@@ -1,39 +1,37 @@
-name: Release
+name: Deliver
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 0 * * 1" # 0h UTC Monday Weekly
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  resolve-version:
+  deliver:
+    if: >
+      !contains(vars.EXCLUDE_DELIVER_ACTORS, github.actor)
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.resolve.outputs.matrix }}
+
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: settings.gradle
+          fetch-depth: 1
 
-      - id: resolve
-        env:
-          DOCKER_USER: ${{ vars.DOCKERHUB_USER }}
-          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DOCKER_REPO: ${{ vars.DOCKERHUB_REPO }}
-        run: bash .shell/release
-
-  release:
-    needs: resolve-version
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
+      - id: parse
+        run: bash .shell/deliver
 
       - uses: ./.github/actions/release
         with:
-          scope: ${{ matrix.scope }}
-          module: ${{ matrix.module }}
-          image: ${{ matrix.image }}
-          version: ${{ matrix.version }}
-          key: ${{ secrets.TAG_MANAGE_DK }}
+          scope: ${{ steps.parse.outputs.scope }}
+          module: ${{ steps.parse.outputs.module }}
+          version: ${{ steps.parse.outputs.version }}
+
+          docker_user: ${{ vars.DOCKERHUB_USER }}
+          docker_repo: ${{ vars.DOCKERHUB_REPO }}
+
+          docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
+          slack: ${{ secrets.SLACK_WEBHOOK_URL }}
+          telegram_token: ${{ secrets.TELEGRAM_TOKEN }}
+          telegram: ${{ secrets.TELEGRAM_CHAT_ID }}
+          discord: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          pat: ${{ secrets.JAVA_DEPLOYMENT_PAT }}

@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 1" # 0h UTC Monday Weekly
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: settings.gradle
+
+      - id: resolve
+        env:
+          DOCKER_USER: ${{ vars.DOCKERHUB_USER }}
+          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKER_REPO: ${{ vars.DOCKERHUB_REPO }}
+        run: bash .shell/release
+
+  release:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/pre-release
+        with:
+          scope: ${{ matrix.scope }}
+          module: ${{ matrix.module }}
+          image: ${{ matrix.image }}
+          version: ${{ matrix.version }}
+          key: ${{ secrets.TAG_MANAGE_DK }}

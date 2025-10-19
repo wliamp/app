@@ -1,181 +1,150 @@
 description: |
-  - Auto-tagging from dev branch
-  - Semantic versioning
-  - Ensure Release
-  - Docker reproducible build
-  - Security scan
-  - Manual approval
-  - Reporting
+  - Tag validation (only image-version tags like X.Y.Z allowed)
+  - Docker image build and tagging
+  - Image push to target registry
+  - Security scan using Trivy
+  - Report generation and artifact upload
+  - Notification for delivery completion
 
 inputs:
   scope:
-    description: "Gradle task tier 1"
     required: true
+    description: "Gradle Task tier 1."
   module:
-    description: "Gradle task tier 2 (belong to 'scope')"
     required: true
-  image:
-    description: "Docker Image repo name"
-    required: true
+    description: "Gradle Task tier 2 (belong to 'scope')."
   version:
-    description: "Target semantic version"
     required: true
-  key:
-    description: "Tags manager Deploy key"
+    description: "Docker Image version"
+  docker_user:
     required: true
+    description: "Username or service account used to authenticate to the Docker registry."
+  docker_token:
+    required: true
+    description: "Access token or password used for Docker registry authentication."
+  docker_repo:
+    required: true
+    description: "Target Docker registry repository or namespace to push the built image."
+  slack:
+    required: true
+    description: "Incoming Slack Webhook URL used to send delivery status notifications."
+  telegram_token:
+    required: false
+    description: "Telegram bot token used for sending notifications."
+  telegram:
+    required: false
+    description: "Telegram chat/group ID to send messages to."
+  discord:
+    required: false
+    description: "Discord webhook URL to send notifications."
+  pat:
+    required: false
+    description: "GitHub Personal Access Token used for repository_dispatch events."
 
 runs:
   using: composite
   steps:
     # ==========================================================
-    # 🌿 STEP 1: Ensure release branch exists & sync from dev
-    # If release/<image> branch doesn't exist, create from dev.
-    # If exists, sync latest commits from origin/dev into it.
-    # ==========================================================
-    - name: 🌿 Ensure & Sync Release Branch
-      id: branch
-      shell: bash
-      run: |
-        set -e
-        RELEASE_BRANCH="release/${{ inputs.image }}"
-        echo "🔍 Checking branch: $RELEASE_BRANCH"
-        git fetch origin dev --quiet
-        git fetch origin "$RELEASE_BRANCH" --quiet || true
-        if git rev-parse --verify "origin/$RELEASE_BRANCH" >/dev/null 2>&1; then
-          echo "✅ Found existing branch: $RELEASE_BRANCH"
-          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
-          echo "🔄 Merging latest dev changes into $RELEASE_BRANCH..."
-          git merge --no-edit origin/dev || true
-          if [[ -n "$(git status --porcelain)" ]]; then
-            echo "📦 Push updated $RELEASE_BRANCH after sync"
-            git config user.name "release[bot]"
-            git config user.email "release[bot]@users.noreply.github.com"
-            git push origin "$RELEASE_BRANCH"
-          else
-            echo "✅ Release branch already up to date with dev."
-          fi
-        else
-          echo "🆕 Creating new branch: $RELEASE_BRANCH from origin/dev"
-          git checkout -b "$RELEASE_BRANCH" origin/dev
-          git push origin "$RELEASE_BRANCH"
-        fi
-        echo "branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
-
-    # ==========================================================
-    # 🏷️ STEP 2: Auto-create Git Tag
-    # Automatically creates and pushes a semantic version tag to remote.
-    # Used for scheduled or manual releases without human intervention.
-    # ==========================================================
-    - name: 🏷️ Create Git Tag
-      id: tag
-      shell: bash
-      run: |
-        TAG="${{ inputs.version }}"
-        BRANCH="${{ steps.branch.outputs.branch }}"
-        mkdir -p .release-log
-        LOG=".release-log/tag-create.log"
-        echo "🔍 Checking if tag '$TAG' exists..." | tee -a "$LOG"
-        git fetch origin --tags --quiet
-        if git rev-parse "$TAG" >/dev/null 2>&1; then
-          echo "❌ Tag already exists: $TAG" | tee -a "$LOG"
-          echo "exists=true" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        echo "🔑 Configuring SSH Deploy Key..."
-        mkdir -p ~/.ssh
-        echo "${{ inputs.key }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan github.com >> ~/.ssh/known_hosts
-        git config user.name "release[bot]"
-        git config user.email "release[bot]@users.noreply.github.com"
-        git checkout "$BRANCH"
-        git tag -a "$TAG" -m "Automated release $TAG for ${{ inputs.image }}"
-        git push git@github.com:${{ github.repository }} "$TAG"
-        echo "✅ Created and pushed tag: $TAG on $BRANCH" | tee -a "$LOG"
-        echo "exists=false" >> $GITHUB_OUTPUT
-
-    # ==========================================================
-    # 🐳 STEP 3: Build Docker image
-    # Builds the Docker image for the target module with caching enabled.
-    # Produces a deterministic tag: ghcr.io/<owner>/<image>:<version>.
+    # 🏗️ STEP 1: Build Docker image
+    # Builds the Docker image using its module directory.
     # ==========================================================
     - name: 🏗️ Build Docker Image
-      if: success()
       shell: bash
       run: |
-        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}:${{ inputs.version }}"
+        IMAGE_NAME="${{ inputs.docker_repo }}/${{ inputs.scope }}/${{ inputs.module }}:${{ inputs.version }}"
+        SCOPE="${{ inputs.scope }}"
+        MODULE="${{ inputs.module }}"
+        echo "🏗️ Building Docker image: $IMAGE_NAME"
+        echo "📦 Scope: $SCOPE | Module: $MODULE"
         docker build \
-          --cache-from="$IMAGE" \
-          -t "$IMAGE" \
-          -f .docker/Dockerfile \
-          --build-arg SCOPE="${{ inputs.scope }}" \
-          --build-arg MODULE="${{ inputs.module }}" \
+          -t "$IMAGE_NAME" \
+          -f ".docker/Dockerfile" \
+          --build-arg SCOPE="$SCOPE" \
+          --build-arg MODULE="$MODULE" \
           .
-        echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
     # ==========================================================
-    # 🧬 STEP 4: Verify reproducible build
-    # Rebuilds the same Docker image twice and compares their SHA IDs.
-    # Ensures build reproducibility and consistency across environments.
+    # 🚀 STEP 2: Push Docker image
+    # Authenticates and pushes the image to the target registry.
     # ==========================================================
-    - name: 🧪 Verify Reproducibility
-      if: success()
+    - name: 🚀 Push Docker Image
       shell: bash
       run: |
-        HASH1=$(docker inspect --format='{{.Id}}' "$IMAGE")
-        docker build \
-          -t "$IMAGE-test" \
-          -f .docker/Dockerfile \
-          --build-arg SCOPE="${{ inputs.scope }}" \
-          --build-arg MODULE="${{ inputs.module }}" \
-          .
-        HASH2=$(docker inspect --format='{{.Id}}' "$IMAGE-test")
-        if [[ "$HASH1" != "$HASH2" ]]; then
-          echo "❌ Non-deterministic build detected!"
-          exit 1
-        fi
-        echo "✅ Reproducible build confirmed"
+        echo "${{ inputs.docker_token }}" | docker login -u "${{ inputs.docker_user }}" --password-stdin
+        docker push "$IMAGE_NAME"
 
     # ==========================================================
-    # 🧰 STEP 5: Initialize CodeQL (SAST)
-    # Sets up GitHub CodeQL for static application security testing.
-    # ==========================================================
-    - name: 🧰 Initialize CodeQL
-      if: success()
-      uses: github/codeql-action/init@v3
-      with:
-        languages: java
-
-    # ==========================================================
-    # 🧪 STEP 6: Run CodeQL analysis
-    # Executes static analysis to identify vulnerabilities in source code.
-    # ==========================================================
-    - name: 🔬 Analyze with CodeQL
-      if: success()
-      uses: github/codeql-action/analyze@v3
-
-    # ==========================================================
-    # 🛡️ STEP 7: Container vulnerability scan
-    # Scans the built Docker image using Trivy to detect OS and library issues.
-    # The pipeline fails on HIGH or CRITICAL findings.
+    # 🛡️ STEP 3: Scan Docker image vulnerabilities
     # ==========================================================
     - name: 🛡️ Scan Docker Image (Trivy)
-      if: success()
       uses: aquasecurity/trivy-action@0.20.0
       with:
-        image-ref: ${{ env.IMAGE }}
+        image-ref: ${{ env.IMAGE_NAME }}
         severity: HIGH,CRITICAL
         ignore-unfixed: true
         exit-code: 1
 
     # ==========================================================
-    # 📊 STEP 8: Upload release log artifacts
-    # Publishes the release logs and tagging info as a downloadable artifact
-    # for manual review and audit tracking.
+    # 🧾 STEP 4: Generate build report
     # ==========================================================
-    - name: 📤 Upload Release Report
-      if: always()
+    - name: 🧾 Generate Delivery Report
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        DIGEST=$(docker images --digests --format "{{.Digest}}" | head -n1 || echo "N/A")
+        echo "DIGEST=$DIGEST" >> $GITHUB_ENV
+        echo "🧾 Delivery Report" > report.txt
+        echo "Status: ${{ job.status }}" >> report.txt
+        echo "Image: $IMAGE_NAME" >> report.txt
+        echo "Digest: $DIGEST" >> report.txt
+        echo "Ref: $GITHUB_REF_NAME" >> report.txt
+
+    # ==========================================================
+    # 📦 STEP 5: Upload delivery artifacts
+    # ==========================================================
+    - name: 📤 Upload Delivery Report
+      if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
-        name: release-report-${{ inputs.image }}-${{ inputs.version }}
-        path: .release-log/
+        name: release-report-${{ inputs.scope }}-${{ inputs.module }}-${{ inputs.version }}
+        path: report.txt
+
+    # ==========================================================
+    # 📣 STEP 6: Notifications
+    # ==========================================================
+    - name: 📣 Notify (Delivery Complete)
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        STATUS="${{ job.status }}"
+        SCOPE="${{ inputs.scope }}"
+        MODULE="${{ inputs.module }}"
+        VERSION="${{ inputs.version }}"
+        if [ "$STATUS" = "success" ]; then
+          MESSAGE="✅ *Delivery completed successfully* for tag: $GITHUB_REF_NAME"
+          MESSAGE="$MESSAGE\n📦 Image: ${SCOPE}/${MODULE}:${VERSION}"
+          MESSAGE="$MESSAGE\n🔑 Digest: ${DIGEST:-N/A}"
+        else
+          MESSAGE="❌ *Delivery failed* for tag: $GITHUB_REF_NAME"
+          MESSAGE="$MESSAGE\n🧩 Scope: ${SCOPE} | Module: ${MODULE}"
+        fi
+        echo "🔔 Sending notifications..."
+        curl -X POST -H "Content-Type: application/json" \
+          --data "{\"text\":\"$MESSAGE\"}" ${{ inputs.slack }} || true
+        curl -s -X POST "https://api.telegram.org/bot${{ inputs.telegram_token }}/sendMessage" \
+          -d "chat_id=${{ inputs.telegram }}" \
+          -d "text=$MESSAGE" || true
+        curl -X POST \
+          -H "Content-Type: application/json" \
+          -d "{\"content\":\"$MESSAGE\"}" ${{ inputs.discord }} || true
+        if [ "$STATUS" = "success" ]; then
+          echo "🚀 Triggering downstream repository..."
+          curl -X POST \
+            -H "Authorization: Bearer ${{ inputs.pat }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/wliamp/java-deployment/dispatches \
+            -d "{\"event_type\":\"delivery_completed\",\"client_payload\":{\"scope\":\"${SCOPE}\",\"module\":\"${MODULE}\",\"version\":\"${VERSION}\"}}"
+        else
+          echo "⚠️ Job failed, skipping downstream trigger."
+        fi

@@ -1,52 +1,22 @@
 #!/bin/bash
 set -euo pipefail
-echo "🔍 Parsing settings.gradle to detect buildable modules..."
-mapfile -t modules < <(grep -oE "'[a-z0-9:\-]+'" settings.gradle | tr -d "'" | sort)
-if [ ${#modules[@]} -eq 0 ]; then
-  echo "❌ No modules found in settings.gradle"
+BRANCH="${GITHUB_REF_NAME}"
+TAG="${GITHUB_REF#refs/tags/}"
+echo "🧩 Branch: $BRANCH"
+echo "🏷️ Tag: $TAG"
+if [[ ! "$BRANCH" =~ ^release/([a-z0-9\-]+)/([a-z0-9\-]+)$ ]]; then
+  echo "❌ Invalid branch format. Expected: release/<scope>/<module>"
   exit 1
 fi
-echo "🧾 All modules detected:"
-printf ' - %s\n' "${modules[@]}"
-mapfile -t buildable < <(printf '%s\n' "${modules[@]}" | grep -E '.+:.+')
-if [ ${#buildable[@]} -eq 0 ]; then
-  echo "❌ No buildable (level-2) modules found."
+SCOPE="${BASH_REMATCH[1]}"
+MODULE="${BASH_REMATCH[2]}"
+if [[ ! "$TAG" =~ ^([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+  echo "❌ Invalid tag format. Expected: X.Y.Z (e.g. 1.2.3)"
   exit 1
 fi
-echo "🚀 Buildable modules (to be built as Docker images):"
-printf ' - %s\n' "${buildable[@]}"
-versions='[]'
-for module in "${buildable[@]}"; do
-  scope=$(echo "$module" | cut -d':' -f1)
-  name=$(echo "$module" | cut -d':' -f2)
-  image="$scope/$name"
-  echo "🔍 Checking latest tag for $image ..."
-  latest=$(curl -s -u "${DOCKER_USER}:${DOCKER_TOKEN}" \
-    "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1" \
-    | jq -r '.results[0].name' || echo "0.0.0")
-  if [[ -z "$latest" || "$latest" == "null" ]]; then
-    latest="0.0.0"
-  fi
-  IFS='.' read -r major minor patch <<< "$latest"
-  major=${major:-0}
-  minor=${minor:-0}
-  patch=${patch:-0}
-  patch=$((patch + 1))
-  if (( patch > 9 )); then
-    patch=0; minor=$((minor + 1))
-  fi
-  if (( minor > 9 )); then
-    minor=0; major=$((major + 1))
-  fi
-  next="$major.$minor.$patch"
-  echo "🔢 Next version for $image → $next"
-  versions=$(jq -c \
-    --arg scope "$scope" \
-    --arg module "$name" \
-    --arg image "$image" \
-    --arg version "$next" \
-    '. + [{"scope":$scope,"module":$module,"image":$image,"version":$version}]' <<< "${versions:-[]}")
-done
-echo "✅ Final release matrix:"
-echo "$versions" | jq .
-echo "matrix={\"include\":$versions}" >> "$GITHUB_OUTPUT"
+VERSION="${BASH_REMATCH[1]}"
+{
+  echo "scope=$SCOPE"
+  echo "module=$MODULE"
+  echo "version=$VERSION"
+} >> "$GITHUB_OUTPUT"
