@@ -22,9 +22,9 @@ for module_path in "${buildable[@]}"; do
   image="$scope/$service"
   echo "🔍 Checking latest tag for $image ..."
   latest=$(curl -s -u "${DOCKER_USER}:${DOCKER_TOKEN}" \
-    "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1" \
+    "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1&ordering=last_updated" \
     | jq -r '.results[0].name // empty')
-  latest=${latest:-0.0.0}
+  latest=${latest:-0.0.0.0}
   IFS='.' read -r stable major minor patch <<< "$latest"
   stable=${stable:-0}
   major=${major:-0}

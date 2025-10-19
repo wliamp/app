@@ -9,20 +9,23 @@ description: |
 
 inputs:
   scope:
-    description: "Gradle module tier 1"
+    description: "Java Spring Boot independent application"
     required: true
   service:
-    description: "Gradle module tier 2 (belong to 'scope')"
+    description: "A Service belong to Scope"
     required: true
   image:
-    description: "Docker Image repo name"
+    description: "Docker Image repository name"
     required: true
   version:
     description: "Target semantic version"
     required: true
   key:
-    description: "Tags manager Deploy key"
     required: true
+    description: "SSH Deploy Key granting write access in this repository."
+  pat:
+    required: true
+    description: "GitHub Personal Access Token (PAT) used for authentication with GitHub CLI when creating Pull Requests."
 
 runs:
   using: composite
@@ -183,3 +186,40 @@ runs:
       with:
         name: release-report-${{ inputs.image }}-${{ inputs.version }}
         path: .release-log/
+
+    # ==========================================================
+    # 🔄 STEP 9: Create Pull Request to main
+    # Automatically opens or updates a PR from release/<image> to main.
+    # Includes context-aware title, body, and reviewer assignment.
+    # Used for integrating verified releases into mainline.
+    # ==========================================================
+    - name: 🔄 Create Pull Request to main
+      if: success()
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.pat }}
+      run: |
+        RELEASE_BRANCH="${{ steps.branch.outputs.branch }}"
+        TITLE="🚀 Merge ${RELEASE_BRANCH} → main"
+        BODY=$(cat <<EOF
+        ### 🔄 Automated Release PR
+        This pull request was automatically created after successful:
+          - ✅ Sync from \`dev\`
+          - ✅ Tag \`${{ inputs.version }}\`
+          - ✅ Build & Reproducibility Check
+          - ✅ CodeQL (SAST)
+          - ✅ Trivy (Container Security Scan)
+
+          #### 📦 Service Details
+          - **Scope:** \`${{ inputs.scope }}\`
+          - **Service:** \`${{ inputs.service }}\`
+          - **Image:** \`${{ inputs.image }}\`
+          - **Version:** \`${{ inputs.version }}\`
+        > Created by the \`release[bot]\` automation workflow for controlled promotion to \`main\`.
+        EOF
+        )
+        gh pr create \
+          --title "$TITLE" \
+          --body "$BODY"
+          --base main \
+          --head "$RELEASE_BRANCH" || echo "ℹ️ Pull Request already exists."
