@@ -1,18 +1,17 @@
 description: |
-  - Tag validation (only image-version tags like X.Y.Z allowed)
   - Docker image build and tagging
   - Image push to target registry
   - Security scan using Trivy
   - Report generation and artifact upload
-  - Notification for delivery completion
+  - Notification for release completion
 
 inputs:
   scope:
     required: true
-    description: "Gradle Task tier 1."
-  module:
+    description: "Gradle module tier 1."
+  service:
     required: true
-    description: "Gradle Task tier 2 (belong to 'scope')."
+    description: "Gradle module tier 2 (belong to 'scope')."
   version:
     required: true
     description: "Docker Image version"
@@ -27,7 +26,7 @@ inputs:
     description: "Target Docker registry repository or namespace to push the built image."
   slack:
     required: true
-    description: "Incoming Slack Webhook URL used to send delivery status notifications."
+    description: "Incoming Slack Webhook URL used to send release status notifications."
   telegram_token:
     required: false
     description: "Telegram bot token used for sending notifications."
@@ -46,21 +45,21 @@ runs:
   steps:
     # ==========================================================
     # 🏗️ STEP 1: Build Docker image
-    # Builds the Docker image using its module directory.
+    # Builds the Docker image using its service directory.
     # ==========================================================
     - name: 🏗️ Build Docker Image
       shell: bash
       run: |
-        IMAGE_NAME="${{ inputs.docker_repo }}/${{ inputs.scope }}/${{ inputs.module }}:${{ inputs.version }}"
+        IMAGE_NAME="${{ inputs.docker_repo }}/${{ inputs.scope }}/${{ inputs.service }}:${{ inputs.version }}"
         SCOPE="${{ inputs.scope }}"
-        MODULE="${{ inputs.module }}"
+        SERVICE="${{ inputs.service }}"
         echo "🏗️ Building Docker image: $IMAGE_NAME"
-        echo "📦 Scope: $SCOPE | Module: $MODULE"
+        echo "📦 scope: $SCOPE | service: $SERVICE"
         docker build \
           -t "$IMAGE_NAME" \
           -f ".docker/Dockerfile" \
           --build-arg SCOPE="$SCOPE" \
-          --build-arg MODULE="$MODULE" \
+          --build-arg SERVICE="$SERVICE" \
           .
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
 
@@ -88,46 +87,46 @@ runs:
     # ==========================================================
     # 🧾 STEP 4: Generate build report
     # ==========================================================
-    - name: 🧾 Generate Delivery Report
+    - name: 🧾 Generate Release Report
       if: ${{ always() }}
       shell: bash
       run: |
         DIGEST=$(docker images --digests --format "{{.Digest}}" | head -n1 || echo "N/A")
         echo "DIGEST=$DIGEST" >> $GITHUB_ENV
-        echo "🧾 Delivery Report" > report.txt
+        echo "🧾 release Report" > report.txt
         echo "Status: ${{ job.status }}" >> report.txt
         echo "Image: $IMAGE_NAME" >> report.txt
         echo "Digest: $DIGEST" >> report.txt
         echo "Ref: $GITHUB_REF_NAME" >> report.txt
 
     # ==========================================================
-    # 📦 STEP 5: Upload delivery artifacts
+    # 📦 STEP 5: Upload release artifacts
     # ==========================================================
-    - name: 📤 Upload Delivery Report
+    - name: 📤 Upload Release Report
       if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
-        name: release-report-${{ inputs.scope }}-${{ inputs.module }}-${{ inputs.version }}
+        name: release-report-${{ inputs.scope }}-${{ inputs.service }}-${{ inputs.version }}
         path: report.txt
 
     # ==========================================================
     # 📣 STEP 6: Notifications
     # ==========================================================
-    - name: 📣 Notify (Delivery Complete)
+    - name: 📣 Notify (Release Complete)
       if: ${{ always() }}
       shell: bash
       run: |
         STATUS="${{ job.status }}"
         SCOPE="${{ inputs.scope }}"
-        MODULE="${{ inputs.module }}"
+        SERVICE="${{ inputs.service }}"
         VERSION="${{ inputs.version }}"
         if [ "$STATUS" = "success" ]; then
-          MESSAGE="✅ *Delivery completed successfully* for tag: $GITHUB_REF_NAME"
-          MESSAGE="$MESSAGE\n📦 Image: ${SCOPE}/${MODULE}:${VERSION}"
+          MESSAGE="✅ *release completed successfully* for tag: $GITHUB_REF_NAME"
+          MESSAGE="$MESSAGE\n📦 Image: ${SCOPE}/${SERVICE}:${VERSION}"
           MESSAGE="$MESSAGE\n🔑 Digest: ${DIGEST:-N/A}"
         else
-          MESSAGE="❌ *Delivery failed* for tag: $GITHUB_REF_NAME"
-          MESSAGE="$MESSAGE\n🧩 Scope: ${SCOPE} | Module: ${MODULE}"
+          MESSAGE="❌ *release failed* for tag: $GITHUB_REF_NAME"
+          MESSAGE="$MESSAGE\n🧩 scope: ${SCOPE} | service: ${SERVICE}"
         fi
         echo "🔔 Sending notifications..."
         curl -X POST -H "Content-Type: application/json" \
@@ -144,7 +143,7 @@ runs:
             -H "Authorization: Bearer ${{ inputs.pat }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/wliamp/java-deployment/dispatches \
-            -d "{\"event_type\":\"delivery_completed\",\"client_payload\":{\"scope\":\"${SCOPE}\",\"module\":\"${MODULE}\",\"version\":\"${VERSION}\"}}"
+            -d "{\"event_type\":\"released\",\"client_payload\":{\"scope\":\"${SCOPE}\",\"service\":\"${SERVICE}\",\"version\":\"${VERSION}\"}}"
         else
           echo "⚠️ Job failed, skipping downstream trigger."
         fi

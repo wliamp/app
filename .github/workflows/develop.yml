@@ -1,15 +1,11 @@
 name: Develop
 
 on:
-  push:
-    branches: [ dev ]
   pull_request:
     branches: [ dev ]
 
 jobs:
   detect-changes:
-    if: >
-      !contains(vars.EXCLUDE_DEVELOP_ACTORS, github.actor)
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
@@ -31,9 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 1
           sparse-checkout: |
-            ${{ matrix.scope }}/${{ matrix.module }}
+            ${{ matrix.scope }}/${{ matrix.service }}
             settings.gradle
             */build.gradle
             gradle/
@@ -42,4 +38,4 @@ jobs:
       - uses: ./.github/actions/develop
         with:
           scope: ${{ matrix.scope }}
-          module: ${{ matrix.module }}
+          service: ${{ matrix.service }}

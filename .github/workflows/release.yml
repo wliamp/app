@@ -1,15 +1,11 @@
-name: Deliver
+name: Release
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
 
 jobs:
   deliver:
-    if: >
-      !contains(vars.EXCLUDE_DELIVER_ACTORS, github.actor)
     runs-on: ubuntu-latest
 
     steps:
@@ -18,12 +14,12 @@ jobs:
           fetch-depth: 1
 
       - id: parse
-        run: bash .shell/deliver
+        run: bash .shell/release
 
       - uses: ./.github/actions/release
         with:
           scope: ${{ steps.parse.outputs.scope }}
-          module: ${{ steps.parse.outputs.module }}
+          service: ${{ steps.parse.outputs.service }}
           version: ${{ steps.parse.outputs.version }}
 
           docker_user: ${{ vars.DOCKERHUB_USER }}

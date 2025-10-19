@@ -1,21 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 BRANCH="${GITHUB_REF#refs/heads/}"
-if [[ ! "$BRANCH" =~ ^(main|release/.*|feature/.*|bugfix/.*)$ ]]; then
+if [[ ! "$BRANCH" =~ ^(feature/.*|bugfix/.*)$ ]]; then
   echo "❌ Branch '$BRANCH' is NOT ALLOWED for CI (DEVELOPMENT)."
   exit 1
 fi
 echo "✅ Branch validation passed for $BRANCH"
 WORKDIR=$(pwd)
 TMP_DIR=$(mktemp -d)
-echo "🔍 Scanning repo for modules..."
+echo "🔍 Scanning repo for services..."
 find . -mindepth 2 -maxdepth 2 -type f -name "build.gradle*" \
   | sed 's|^\./||; s|/build.gradle.*||' \
-  | sort > "$TMP_DIR/all_modules.txt"
-jq -R -s -c 'split("\n")[:-1] | map(split("/")) | map({scope:.[0], module:.[1]})' \
-  "$TMP_DIR/all_modules.txt" > "$TMP_DIR/all_modules.json"
-echo "🧾 All modules discovered:"
-cat "$TMP_DIR/all_modules.json" | jq .
+  | sort > "$TMP_DIR/all_services.txt"
+jq -R -s -c 'split("\n")[:-1] | map(split("/")) | map({scope:.[0], service:.[1]})' \
+  "$TMP_DIR/all_services.txt" > "$TMP_DIR/all_services.json"
+echo "🧾 All services discovered:"
+cat "$TMP_DIR/all_services.json" | jq .
 base=$(git merge-base origin/dev HEAD || echo "")
 if [[ -z "$base" ]]; then
   echo "::warning::No base branch found → full build"
@@ -28,14 +28,14 @@ else
     level="root"
     echo "::warning::Root-level change detected → full build"
   else
-    level="module"
+    level="service"
   fi
 fi
-all=$(cat "$TMP_DIR/all_modules.json")
+all=$(cat "$TMP_DIR/all_services.json")
 if [[ "$level" == "root" ]]; then
   matrix="$all"
 else
-  echo "🧠 Analyzing changed scopes/modules..."
+  echo "🧠 Analyzing changed scopes/services..."
   awk -F'/' '{print $1}' "$TMP_DIR/changed.txt" | sort -u > "$TMP_DIR/scopes.txt"
   awk -F'/' '{print $1"/"$2}' "$TMP_DIR/changed.txt" | sort -u > "$TMP_DIR/paths.txt"
   matrix=$(jq -c \
@@ -45,10 +45,10 @@ else
     [ $all[] | select(
         ($scopes | index(.scope))
         or
-        ($mods | index((.scope + "/" + .module)))
+        ($mods | index((.scope + "/" + .service)))
       ) ]')
   if [[ "$(jq length <<< "$matrix")" -eq 0 ]]; then
-    echo "::warning::No module match found → full build"
+    echo "::warning::No service match found → full build"
     matrix="$all"
   fi
 fi

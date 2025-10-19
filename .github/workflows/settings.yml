@@ -1,17 +1,12 @@
 name: Settings
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
-    paths: [ settings.gradle ]
-  pull_request:
     branches: [ main ]
     paths: [ settings.gradle ]
 
 jobs:
-  sync-settings:
-    if: contains(vars.INCLUDE_SETTINGS_ACTORS, github.actor)
+  settings:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,6 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 2
           sparse-checkout: settings.gradle
 

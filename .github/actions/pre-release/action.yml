@@ -9,10 +9,10 @@ description: |
 
 inputs:
   scope:
-    description: "Gradle task tier 1"
+    description: "Gradle module tier 1"
     required: true
-  module:
-    description: "Gradle task tier 2 (belong to 'scope')"
+  service:
+    description: "Gradle module tier 2 (belong to 'scope')"
     required: true
   image:
     description: "Docker Image repo name"
@@ -100,7 +100,7 @@ runs:
 
     # ==========================================================
     # 🐳 STEP 3: Build Docker image
-    # Builds the Docker image for the target module with caching enabled.
+    # Builds the Docker image for the target service with caching enabled.
     # Produces a deterministic tag: ghcr.io/<owner>/<image>:<version>.
     # ==========================================================
     - name: 🏗️ Build Docker Image
@@ -113,7 +113,7 @@ runs:
           -t "$IMAGE" \
           -f .docker/Dockerfile \
           --build-arg SCOPE="${{ inputs.scope }}" \
-          --build-arg MODULE="${{ inputs.module }}" \
+          --build-arg SERVICE="${{ inputs.service }}" \
           .
         echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
@@ -131,7 +131,7 @@ runs:
           -t "$IMAGE-test" \
           -f .docker/Dockerfile \
           --build-arg SCOPE="${{ inputs.scope }}" \
-          --build-arg MODULE="${{ inputs.module }}" \
+          --build-arg SERVICE="${{ inputs.service }}" \
           .
         HASH2=$(docker inspect --format='{{.Id}}' "$IMAGE-test")
         if [[ "$HASH1" != "$HASH2" ]]; then
