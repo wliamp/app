@@ -3,10 +3,10 @@ description: |
   - Mirrors the latest deployment artifacts into a dedicated deployment repository.
 
 inputs:
-  pat:
+  in_key:
     required: true
-    description: "GitHub Personal Access Token (PAT) used for authentication with GitHub CLI when creating Pull Requests."
-  key:
+    description: "SSH Deploy Key granting write access in this repository."
+  ex_key:
     required: true
     description: "SSH Deploy Key granting write access to the external deployment repository."
 
@@ -26,27 +26,22 @@ runs:
       id: compose
       shell: bash
       continue-on-error: true
-      env:
-        GH_TOKEN: ${{ inputs.pat }}
       run: |
         set -euo pipefail
         echo "🔍 Checking for README or docker-compose changes..."
-        branch="auto/settings-$(date +%s)"
+        mkdir -p ~/.ssh
+        echo "${{ inputs.in_key }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
         git config user.name "settings[bot]"
         git config user.email "settings[bot]@users.noreply.github.com"
-        git checkout -b "$branch"
         git add README.md docker-compose.yml
         if git diff --cached --quiet; then
           echo "✅ No README or compose changes detected."
           exit 0
         fi
         git commit -m "chore(root): sync Gradle structure"
-        git push origin "$branch"
-        gh pr create \
-          --title "chore(root): sync Gradle structure" \
-          --body "Auto-sync based on settings.gradle." \
-          --base main \
-          --head "$branch" || echo "ℹ️ Pull request already exists."
+        git push origin main
 
     # =============================================================
     # Step 2: Sync deployment artifacts to external Deploy repo
@@ -66,7 +61,7 @@ runs:
         set -euo pipefail
         echo "🚀 Syncing deployment artifacts..."
         mkdir -p ~/.ssh
-        echo "${{ inputs.key }}" > ~/.ssh/id_rsa
+        echo "${{ inputs.ex_key }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
         DEPLOY_DIR="${{ runner.temp }}/java-deployment"
