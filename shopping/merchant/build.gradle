@@ -5,6 +5,7 @@ plugins {
 }
 
 dependencies {
+    implementation(libs.shopping.merchant)
 }
 
 tasks.named('test') {

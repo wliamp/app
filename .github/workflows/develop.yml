@@ -36,6 +36,9 @@ jobs:
             gradlew
 
       - uses: ./.github/actions/develop
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.CONTRACT_PAT }}
         with:
           scope: ${{ matrix.scope }}
           service: ${{ matrix.service }}

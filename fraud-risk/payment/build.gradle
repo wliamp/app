@@ -5,6 +5,7 @@ plugins {
 }
 
 dependencies {
+    implementation(libs.fraud.risk.payment)
 }
 
 tasks.named('test') {

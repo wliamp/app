@@ -1,0 +1,21 @@
+[versions]
+banking-acquirer = '0.0.1'
+banking-issuer = '0.0.1'
+clearing-settlement-payment = '0.0.1'
+compliance-regulatory-payment = '0.0.1'
+fraud-risk-payment = '0.0.1'
+payment-card-network = '0.0.1'
+payment-gateway = '0.0.1'
+payment-processor = '0.0.1'
+shopping-merchant = '0.0.1'
+
+[libraries]
+banking-acquirer = { module = 'io.github.wliamp:banking-acquirer', version.ref = 'banking-acquirer' }
+banking-issuer = { module = 'io.github.wliamp:banking-issuer', version.ref = 'banking-issuer' }
+clearing-settlement-payment = { module = 'io.github.wliamp:clearing-settlement-payment', version.ref = 'clearing-settlement-payment' }
+compliance-regulatory-payment = { module = 'io.github.wliamp:compliance-regulatory-payment', version.ref = 'compliance-regulatory-payment' }
+fraud-risk-payment = { module = 'io.github.wliamp:fraud-risk-payment', version.ref = 'fraud-risk-payment' }
+payment-card-network = { module = 'io.github.wliamp:payment-card-network', version.ref = 'payment-card-network' }
+payment-gateway = { module = 'io.github.wliamp:payment-gateway', version.ref = 'payment-gateway' }
+payment-processor = { module = 'io.github.wliamp:payment-processor', version.ref = 'payment-processor' }
+shopping-merchant = { module = 'io.github.wliamp:shopping-merchant', version.ref = 'shopping-merchant' }
