@@ -60,10 +60,6 @@ runs:
       run: |
         set -euo pipefail
         echo "🚀 Syncing deployment artifacts..."
-        mkdir -p ~/.ssh
-        echo "${{ inputs.ex_key }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
         DEPLOY_DIR="${{ runner.temp }}/java-deployment"
         git clone --depth=1 git@github.com:wliamp/java-deployment.git "$DEPLOY_DIR"
         cd "$DEPLOY_DIR"
@@ -79,6 +75,10 @@ runs:
           mkdir -p "$folder"
           cp -r "$SRC"/* "$folder"/ || echo "⚠️ No files in $SRC"
         done
+        mkdir -p ~/.ssh
+        echo "${{ inputs.ex_key }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
         git config user.name "settings[bot]"
         git config user.email "settings[bot]@users.noreply.github.com"
         git add -A
@@ -104,7 +104,7 @@ runs:
         fi
         echo "🧾 Generating synchronization report..."
         {
-          echo "🔧 Sync Report"
+          echo "🔧 Settings Report"
           echo "==============="
           echo "🧩 Compose Step: $STATUS_COMPOSE"
           echo "📦 Deploy Step: $STATUS_DEPLOY"
@@ -114,11 +114,11 @@ runs:
           echo "🔗 Repository: $GITHUB_REPOSITORY"
           echo "👤 Triggered by: $GITHUB_ACTOR"
           echo "🕒 Timestamp: $(date -u)"
-        } > sync-report.txt
+        } > settings-report.txt
 
     - name: 📤 Upload Sync Report Artifact
       if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
-        name: sync-report
-        path: sync-report.txt
+        name: settings-report
+        path: settings-report.txt

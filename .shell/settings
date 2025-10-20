@@ -222,22 +222,57 @@ echo "🚀 [generate] Creating Docker Compose..."
 } > "$COMPOSE"
 echo "✅ Docker Compose ready."
 mkdir -p "$TERRAFORM_DIR"
-echo "🚀 [generate] Creating Terraform skeleton..."
+echo "🚀 [generate] Creating Terraform deployable skeleton..."
 for m in "${LEVEL2_MODULES[@]}"; do
   dirpath="${m//:/\/}"
   tf_dir="${TERRAFORM_DIR}/${dirpath}"
   mkdir -p "$tf_dir"
   name="${m##*:}"
+  cat <<EOF > "${tf_dir}/variables.tf"
+variable "namespace" { type = string }
+variable "docker" { type = string }
+variable "repo" { type = string }
+variable "tag" { type = string }
+EOF
   cat <<EOF > "${tf_dir}/main.tf"
+provider "kubernetes" {}
 resource "kubernetes_deployment" "${name}" {
   metadata {
-    name = "${name}"
+    name      = var.repo
+    namespace = var.namespace
+    labels = { app = var.repo }
   }
   spec {
     replicas = 1
+    selector {
+      match_labels = { app = var.repo }
+    }
+    template {
+      metadata {
+        labels = { app = var.repo }
+      }
+      spec {
+        container {
+          name  = var.repo
+          image = "\${var.docker}/\${var.repo}:\${var.tag}"
+          port { name = "http", container_port = 8080 }
+        }
+      }
+    }
+  }
+}
+resource "kubernetes_service" "${name}" {
+  metadata {
+    name      = var.repo
+    namespace = var.namespace
+  }
+  spec {
+    selector = { app = var.repo }
+    port { port = 80, target_port = 8080 }
+    type = "ClusterIP"
   }
 }
 EOF
 done
-echo "✅ Terraform skeleton ready."
+echo "✅ Terraform ready."
 echo "🎉 All done! (README + Helm + Manifests + Compose + Terraform updated)"

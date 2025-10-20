@@ -17,15 +17,16 @@ jobs:
 
       - id: resolve
         env:
-          DOCKER_USER: ${{ vars.DOCKERHUB_USER }}
-          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DOCKER_REPO: ${{ vars.DOCKERHUB_REPO }}
+          DOCKERHUB_USER: ${{ vars.DOCKERHUB_USER }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
         run: bash .shell/pre-release
 
   pre-release:
     needs: resolve-version
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +37,6 @@ jobs:
         with:
           scope: ${{ matrix.scope }}
           service: ${{ matrix.service }}
-          image: ${{ matrix.image }}
           version: ${{ matrix.version }}
           key: ${{ secrets.JAVA_DK }}
           pat: ${ secrets.JAVA_PAT }}

@@ -19,10 +19,10 @@ versions='[]'
 for module_path in "${buildable[@]}"; do
   scope=$(echo "$module_path" | cut -d':' -f1)
   service=$(echo "$module_path" | cut -d':' -f2)
-  image="$scope/$service"
+  image="$scope-$service"
   echo "🔍 Checking latest tag for $image ..."
-  latest=$(curl -s -u "${DOCKER_USER}:${DOCKER_TOKEN}" \
-    "https://hub.docker.com/v2/repositories/${DOCKER_REPO}/${image}/tags?page_size=1&ordering=last_updated" \
+  latest=$(curl -s -u "${DOCKERHUB_USER}:${DOCKERHUB_TOKEN}" \
+    "https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/${image}/tags?page_size=1&ordering=last_updated" \
     | jq -r '.results[0].name // empty')
   latest=${latest:-0.0.0.0}
   IFS='.' read -r stable major minor patch <<< "$latest"
@@ -33,13 +33,12 @@ for module_path in "${buildable[@]}"; do
   patch=$((patch + 1))
   next="$stable.$major.$minor.$patch"
   echo "🔢 Next version for $image → $next"
-  versions=$(jq -c \
+  images=$(jq -c \
     --arg scope "$scope" \
     --arg service "$service" \
-    --arg image "$image" \
     --arg version "$next" \
-    '. + [{"scope":$scope,"service":$service,"image":$image,"version":$version}]' <<< "${versions:-[]}")
+    '. + [{"scope":$scope,"service":$service,"version":$version}]' <<< "${images:-[]}")
 done
 echo "✅ Final release matrix:"
-echo "$versions" | jq .
-echo "matrix={\"include\":$(echo "$versions" | jq -c .)}" >> "$GITHUB_OUTPUT"
+echo "$images" | jq .
+echo "matrix={\"include\":$(echo "$images" | jq -c .)}" >> "$GITHUB_OUTPUT"

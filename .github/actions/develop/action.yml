@@ -8,10 +8,10 @@ description: |
 
 inputs:
   scope:
-    description: "Gradle module tier 1"
+    description: "Java Spring Boot independent application"
     required: true
   service:
-    description: "Gradle module tier 2 (belong to 'scope')"
+    description: "A Service belong to Scope"
     required: true
 
 runs:
@@ -57,9 +57,13 @@ runs:
     # Build will fail on findings with severity ≥ HIGH.
     # ==========================================================
     - name: 🧩 Dependency Security Scan
-      uses: anchore/scan-action@v4
+      shell: bash
+      working-directory: ./${{ inputs.scope }}/${{ inputs.service }}
+      run: ./gradlew dependencies --configuration runtimeClasspath > deps.txt
+
+    - uses: anchore/scan-action@v4
       with:
-        path: ./${{ inputs.scope }}/${{ inputs.service }}
+        path: ./${{ inputs.scope }}/${{ inputs.service }}/deps.txt
         fail-build: true
         severity-cutoff: high
 

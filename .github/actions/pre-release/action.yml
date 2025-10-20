@@ -14,9 +14,6 @@ inputs:
   service:
     description: "A Service belong to Scope"
     required: true
-  image:
-    description: "Docker Image repository name"
-    required: true
   version:
     description: "Target semantic version"
     required: true
@@ -40,7 +37,7 @@ runs:
       shell: bash
       run: |
         set -e
-        RELEASE_BRANCH="release/${{ inputs.image }}"
+        RELEASE_BRANCH="release/${{ inputs.scope }}/${{ inputs.service }}"
         echo "🔍 Checking branch: $RELEASE_BRANCH"
         git fetch origin dev --quiet
         git fetch origin "$RELEASE_BRANCH" --quiet || true
@@ -96,7 +93,7 @@ runs:
         git config user.name "release[bot]"
         git config user.email "release[bot]@users.noreply.github.com"
         git checkout "$BRANCH"
-        git tag -a "$TAG" -m "Automated release $TAG for ${{ inputs.image }}"
+        git tag -a "$TAG" -m "Automated release $TAG for ${{ inputs.scope }}/${{ inputs.service }}"
         git push git@github.com:${{ github.repository }} "$TAG"
         echo "✅ Created and pushed tag: $TAG on $BRANCH" | tee -a "$LOG"
         echo "exists=false" >> $GITHUB_OUTPUT
@@ -110,7 +107,7 @@ runs:
       if: success()
       shell: bash
       run: |
-        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}:${{ inputs.version }}"
+        IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.scope }}-${{ inputs.service }}:${{ inputs.version }}"
         docker build \
           --cache-from="$IMAGE" \
           -t "$IMAGE" \
@@ -184,7 +181,7 @@ runs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: release-report-${{ inputs.image }}-${{ inputs.version }}
+        name: release-report-${{ inputs.scope }}-${{ inputs.service }}-${{ inputs.version }}
         path: .release-log/
 
     # ==========================================================
@@ -213,7 +210,6 @@ runs:
           #### 📦 Service Details
           - **Scope:** \`${{ inputs.scope }}\`
           - **Service:** \`${{ inputs.service }}\`
-          - **Image:** \`${{ inputs.image }}\`
           - **Version:** \`${{ inputs.version }}\`
         > Created by the \`release[bot]\` automation workflow for controlled promotion to \`main\`.
         EOF

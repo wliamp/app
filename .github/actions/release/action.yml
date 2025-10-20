@@ -50,7 +50,7 @@ runs:
     - name: 🏗️ Build Docker Image
       shell: bash
       run: |
-        IMAGE_NAME="${{ inputs.docker_repo }}/${{ inputs.scope }}/${{ inputs.service }}:${{ inputs.version }}"
+        IMAGE_NAME="docker.io/${{ inputs.docker_repo }}/${{ inputs.scope }}-${{ inputs.service }}:${{ inputs.version }}"
         SCOPE="${{ inputs.scope }}"
         SERVICE="${{ inputs.service }}"
         echo "🏗️ Building Docker image: $IMAGE_NAME"
@@ -122,7 +122,7 @@ runs:
         VERSION="${{ inputs.version }}"
         if [ "$STATUS" = "success" ]; then
           MESSAGE="✅ *release completed successfully* for tag: $GITHUB_REF_NAME"
-          MESSAGE="$MESSAGE\n📦 Image: ${SCOPE}/${SERVICE}:${VERSION}"
+          MESSAGE="$MESSAGE\n📦 Image: ${SCOPE}-${SERVICE}:${VERSION}"
           MESSAGE="$MESSAGE\n🔑 Digest: ${DIGEST:-N/A}"
         else
           MESSAGE="❌ *release failed* for tag: $GITHUB_REF_NAME"
