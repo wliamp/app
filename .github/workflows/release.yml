@@ -5,9 +5,8 @@ on:
     branches: [ main ]
 
 jobs:
-  deliver:
+  release:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:

@@ -22,13 +22,12 @@ ext {
 allprojects {
     repositories {
         mavenCentral()
-    }
-
-    maven {
-        url = uri("https://maven.pkg.github.com/wliamp/contract")
-        credentials {
-            username = System.getenv("GITHUB_ACTOR") ?: findProperty("github.actor")
-            password = System.getenv("GITHUB_TOKEN") ?: findProperty("github.token")
+        maven {
+            url = uri("https://maven.pkg.github.com/wliamp/contract")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR") ?: findProperty("github.actor")
+                password = System.getenv("GITHUB_TOKEN") ?: findProperty("github.token")
+            }
         }
     }
 }

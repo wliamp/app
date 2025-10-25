@@ -1,4 +1,4 @@
-name: Settings
+name: Sync Settings
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
     paths: [ settings.gradle ]
 
 jobs:
-  settings:
+  sync-settings:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,9 +18,11 @@ jobs:
           fetch-depth: 2
           sparse-checkout: settings.gradle
 
-      - run: bash .shell/settings
+      - run: bash .shell/sync-settings
+        env:
+          DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
 
-      - uses: ./.github/actions/settings
+      - uses: ./.github/actions/sync-settings
         with:
           in_key: ${{ secrets.JAVA_DK }}
           ex_key: ${{ secrets.JAVA_DEPLOYMENT_DK }}
