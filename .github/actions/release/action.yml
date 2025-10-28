@@ -4,14 +4,12 @@ description: |
   - Security scan using Trivy
   - Report generation and artifact upload
   - Notification for release completion
-
 inputs:
   scope:
+    description: "Java Spring Boot independent application"
     required: true
-    description: "Gradle module tier 1."
   service:
-    required: true
-    description: "Gradle module tier 2 (belong to 'scope')."
+    description: "A Service belong to Scope"
   version:
     required: true
     description: "Docker Image version"
@@ -39,17 +37,10 @@ inputs:
   pat:
     required: false
     description: "GitHub Personal Access Token used for repository_dispatch events."
-
 runs:
   using: composite
   steps:
-    # ==========================================================
-    # 🏗️ STEP 1: Build Docker image
-    # Builds the Docker image using its service directory.
-    # ==========================================================
-    - name: 🏗️ Build Docker Image
-      shell: bash
-      run: |
+    - run: |
         IMAGE_NAME="docker.io/${{ inputs.docker_repo }}/${{ inputs.scope }}-${{ inputs.service }}:${{ inputs.version }}"
         SCOPE="${{ inputs.scope }}"
         SERVICE="${{ inputs.service }}"
@@ -62,35 +53,18 @@ runs:
           --build-arg SERVICE="$SERVICE" \
           .
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-
-    # ==========================================================
-    # 🚀 STEP 2: Push Docker image
-    # Authenticates and pushes the image to the target registry.
-    # ==========================================================
-    - name: 🚀 Push Docker Image
       shell: bash
-      run: |
+    - run: |
         echo "${{ inputs.docker_token }}" | docker login -u "${{ inputs.docker_user }}" --password-stdin
         docker push "$IMAGE_NAME"
-
-    # ==========================================================
-    # 🛡️ STEP 3: Scan Docker image vulnerabilities
-    # ==========================================================
-    - name: 🛡️ Scan Docker Image (Trivy)
-      uses: aquasecurity/trivy-action@0.20.0
+      shell: bash
+    - uses: aquasecurity/trivy-action@0.20.0
       with:
         image-ref: ${{ env.IMAGE_NAME }}
         severity: HIGH,CRITICAL
         ignore-unfixed: true
         exit-code: 1
-
-    # ==========================================================
-    # 🧾 STEP 4: Generate build report
-    # ==========================================================
-    - name: 🧾 Generate Release Report
-      if: ${{ always() }}
-      shell: bash
-      run: |
+    - run: |
         DIGEST=$(docker images --digests --format "{{.Digest}}" | head -n1 || echo "N/A")
         echo "DIGEST=$DIGEST" >> $GITHUB_ENV
         echo "🧾 release Report" > report.txt
@@ -98,24 +72,14 @@ runs:
         echo "Image: $IMAGE_NAME" >> report.txt
         echo "Digest: $DIGEST" >> report.txt
         echo "Ref: $GITHUB_REF_NAME" >> report.txt
-
-    # ==========================================================
-    # 📦 STEP 5: Upload release artifacts
-    # ==========================================================
-    - name: 📤 Upload Release Report
       if: ${{ always() }}
-      uses: actions/upload-artifact@v4
+      shell: bash
+    - uses: actions/upload-artifact@v4
       with:
         name: release-report-${{ inputs.scope }}-${{ inputs.service }}-${{ inputs.version }}
         path: report.txt
-
-    # ==========================================================
-    # 📣 STEP 6: Notifications
-    # ==========================================================
-    - name: 📣 Notify (Release Complete)
       if: ${{ always() }}
-      shell: bash
-      run: |
+    - run: |
         STATUS="${{ job.status }}"
         SCOPE="${{ inputs.scope }}"
         SERVICE="${{ inputs.service }}"
@@ -147,3 +111,5 @@ runs:
         else
           echo "⚠️ Job failed, skipping downstream trigger."
         fi
+      if: ${{ always() }}
+      shell: bash

@@ -6,7 +6,6 @@ if [[ ! "$BRANCH" =~ ^(feature/.*|bugfix/.*)$ ]]; then
   exit 1
 fi
 echo "✅ Branch validation passed for $BRANCH"
-WORKDIR=$(pwd)
 TMP_DIR=$(mktemp -d)
 echo "🔍 Scanning repo for services..."
 find . -mindepth 2 -maxdepth 2 -type f -name "build.gradle*" \

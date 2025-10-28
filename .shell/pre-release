@@ -15,7 +15,7 @@ if [ ${#buildable[@]} -eq 0 ]; then
 fi
 echo "🚀 Buildable services (to be built as Docker images):"
 printf ' - %s\n' "${buildable[@]}"
-versions='[]'
+images='[]'
 for module_path in "${buildable[@]}"; do
   scope=$(echo "$module_path" | cut -d':' -f1)
   service=$(echo "$module_path" | cut -d':' -f2)

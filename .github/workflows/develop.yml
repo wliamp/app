@@ -1,29 +1,19 @@
 name: Develop
-
 on:
   pull_request:
     branches: [ dev ]
-
 jobs:
   detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.detect.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-
-      - id: detect
-        run: bash .shell/develop
-
-  develop:
-    needs: detect-changes
+      - run: bash .shell/develop
+        id: detect
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+  develop:
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,11 +24,16 @@ jobs:
             */build.gradle
             gradle/
             gradlew
-
       - uses: ./.github/actions/develop
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.CONTRACT_PAT }}
         with:
           scope: ${{ matrix.scope }}
           service: ${{ matrix.service }}
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.CONTRACT_PAT }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+    needs: detect-changes
+    runs-on: ubuntu-latest

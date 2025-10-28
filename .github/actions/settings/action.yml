@@ -1,7 +1,6 @@
 description: |
   - Detects and commits any updates to README and docker-compose files, then opens a Pull Request.
   - Mirrors the latest deployment artifacts into a dedicated deployment repository.
-
 inputs:
   in_key:
     required: true
@@ -9,24 +8,10 @@ inputs:
   ex_key:
     required: true
     description: "SSH Deploy Key granting write access to the external deployment repository."
-
 runs:
   using: composite
   steps:
-    # =============================================================
-    # Step 1: Detect and push README/Compose changes
-    #
-    # - Creates a new temporary branch for settings or Compose updates.
-    # - Configures a bot identity for automated commits.
-    # - Commits README.md and docker-compose.yml only if changes are detected.
-    # - Pushes the branch and opens a Pull Request targeting 'main'.
-    # - Avoids duplication if a similar PR already exists.
-    # =============================================================
-    - name: 💾 Commit README & Compose
-      id: compose
-      shell: bash
-      continue-on-error: true
-      run: |
+    - run: |
         set -euo pipefail
         echo "🔍 Checking for README or docker-compose changes..."
         mkdir -p ~/.ssh
@@ -42,22 +27,10 @@ runs:
         fi
         git commit -m "chore(root): sync Gradle structure"
         git push origin main
-
-    # =============================================================
-    # Step 2: Sync deployment artifacts to external Deploy repo
-    #
-    # - Authenticates via SSH Deploy Key to access 'java-deployment' repository.
-    # - Clones the repo into a temporary workspace.
-    # - Iterates through all folders under ./deploy in the source repository.
-    # - Replaces corresponding folders in the Deploy repo with updated artifacts.
-    # - Commits only if actual changes exist, avoiding redundant commits.
-    # - Pushes updates directly to the 'main' branch of the Deploy repository.
-    # =============================================================
-    - name: 📦 Commit & Push to Deploy repo
-      id: deploy
-      shell: bash
+      id: compose
       continue-on-error: true
-      run: |
+      shell: bash
+    - run: |
         set -euo pipefail
         echo "🚀 Syncing deployment artifacts..."
         DEPLOY_DIR="${{ runner.temp }}/java-deployment"
@@ -88,14 +61,10 @@ runs:
           git commit -m "chore: sync deployment artifacts"
           git push origin main
         fi
-
-    # =============================================================
-    # Step 3: Reporting
-    # =============================================================
-    - name: 🧾 Generate Report
-      if: ${{ always() }}
+      id: deploy
+      continue-on-error: true
       shell: bash
-      run: |
+    - run: |
         STATUS_COMPOSE="${{ steps.compose.outcome }}"
         STATUS_DEPLOY="${{ steps.deploy.outcome }}"
         OVERALL="success"
@@ -115,10 +84,10 @@ runs:
           echo "👤 Triggered by: $GITHUB_ACTOR"
           echo "🕒 Timestamp: $(date -u)"
         } > settings-report.txt
-
-    - name: 📤 Upload Sync Report Artifact
       if: ${{ always() }}
-      uses: actions/upload-artifact@v4
+      shell: bash
+    - uses: actions/upload-artifact@v4
       with:
         name: settings-report
         path: settings-report.txt
+      if: ${{ always() }}

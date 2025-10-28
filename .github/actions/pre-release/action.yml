@@ -6,7 +6,6 @@ description: |
   - Security scan
   - Manual approval
   - Reporting
-
 inputs:
   scope:
     description: "Java Spring Boot independent application"
@@ -23,19 +22,10 @@ inputs:
   pat:
     required: true
     description: "GitHub Personal Access Token (PAT) used for authentication with GitHub CLI when creating Pull Requests."
-
 runs:
   using: composite
   steps:
-    # ==========================================================
-    # 🌿 STEP 1: Ensure release branch exists & sync from dev
-    # If release/<image> branch doesn't exist, create from dev.
-    # If exists, sync latest commits from origin/dev into it.
-    # ==========================================================
-    - name: 🌿 Ensure & Sync Release Branch
-      id: branch
-      shell: bash
-      run: |
+    - run: |
         set -e
         RELEASE_BRANCH="release/${{ inputs.scope }}/${{ inputs.service }}"
         echo "🔍 Checking branch: $RELEASE_BRANCH"
@@ -64,16 +54,9 @@ runs:
           git push origin "$RELEASE_BRANCH"
         fi
         echo "branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
-
-    # ==========================================================
-    # 🏷️ STEP 2: Auto-create Git Tag
-    # Automatically creates and pushes a semantic version tag to remote.
-    # Used for scheduled or manual releases without human intervention.
-    # ==========================================================
-    - name: 🏷️ Create Git Tag
-      id: tag
+      id: branch
       shell: bash
-      run: |
+    - run: |
         TAG="${{ inputs.version }}"
         BRANCH="${{ steps.branch.outputs.branch }}"
         mkdir -p .release-log
@@ -97,105 +80,53 @@ runs:
         git push git@github.com:${{ github.repository }} "$TAG"
         echo "✅ Created and pushed tag: $TAG on $BRANCH" | tee -a "$LOG"
         echo "exists=false" >> $GITHUB_OUTPUT
-
-    # ==========================================================
-    # 🐳 STEP 3: Build Docker image
-    # Builds the Docker image for the target service with caching enabled.
-    # Produces a deterministic tag: ghcr.io/<owner>/<image>:<version>.
-    # ==========================================================
-    - name: 🏗️ Build Docker Image
-      if: success()
+      id: tag
       shell: bash
-      run: |
+    - run: |
         IMAGE="ghcr.io/${{ github.repository_owner }}/${{ inputs.scope }}-${{ inputs.service }}:${{ inputs.version }}"
         docker build \
           --cache-from="$IMAGE" \
           -t "$IMAGE" \
           -f .docker/Dockerfile \
           --build-arg SCOPE="${{ inputs.scope }}" \
-          --build-arg SERVICE="${{ inputs.service }}" \
-          .
+          --build-arg SERVICE="${{ inputs.service }}" .
         echo "IMAGE=$IMAGE" >> $GITHUB_ENV
-
-    # ==========================================================
-    # 🧬 STEP 4: Verify reproducible build
-    # Rebuilds the same Docker image twice and compares their SHA IDs.
-    # Ensures build reproducibility and consistency across environments.
-    # ==========================================================
-    - name: 🧪 Verify Reproducibility
       if: success()
       shell: bash
-      run: |
+    - run: |
         HASH1=$(docker inspect --format='{{.Id}}' "$IMAGE")
         docker build \
           -t "$IMAGE-test" \
           -f .docker/Dockerfile \
           --build-arg SCOPE="${{ inputs.scope }}" \
-          --build-arg SERVICE="${{ inputs.service }}" \
-          .
+          --build-arg SERVICE="${{ inputs.service }}" .
         HASH2=$(docker inspect --format='{{.Id}}' "$IMAGE-test")
         if [[ "$HASH1" != "$HASH2" ]]; then
           echo "❌ Non-deterministic build detected!"
           exit 1
         fi
         echo "✅ Reproducible build confirmed"
-
-    # ==========================================================
-    # 🧰 STEP 5: Initialize CodeQL (SAST)
-    # Sets up GitHub CodeQL for static application security testing.
-    # ==========================================================
-    - name: 🧰 Initialize CodeQL
       if: success()
-      uses: github/codeql-action/init@v3
+      shell: bash
+    - uses: github/codeql-action/init@v3
       with:
         languages: java
-
-    # ==========================================================
-    # 🧪 STEP 6: Run CodeQL analysis
-    # Executes static analysis to identify vulnerabilities in source code.
-    # ==========================================================
-    - name: 🔬 Analyze with CodeQL
       if: success()
-      uses: github/codeql-action/analyze@v3
-
-    # ==========================================================
-    # 🛡️ STEP 7: Container vulnerability scan
-    # Scans the built Docker image using Trivy to detect OS and library issues.
-    # The pipeline fails on HIGH or CRITICAL findings.
-    # ==========================================================
-    - name: 🛡️ Scan Docker Image (Trivy)
+    - uses: github/codeql-action/analyze@v3
       if: success()
-      uses: aquasecurity/trivy-action@0.20.0
+    - uses: aquasecurity/trivy-action@0.20.0
       with:
         image-ref: ${{ env.IMAGE }}
         severity: HIGH,CRITICAL
         ignore-unfixed: true
         exit-code: 1
-
-    # ==========================================================
-    # 📊 STEP 8: Upload release log artifacts
-    # Publishes the release logs and tagging info as a downloadable artifact
-    # for manual review and audit tracking.
-    # ==========================================================
-    - name: 📤 Upload Release Report
-      if: always()
-      uses: actions/upload-artifact@v4
+      if: success()
+    - uses: actions/upload-artifact@v4
       with:
         name: release-report-${{ inputs.scope }}-${{ inputs.service }}-${{ inputs.version }}
         path: .release-log/
-
-    # ==========================================================
-    # 🔄 STEP 9: Create Pull Request to main
-    # Automatically opens or updates a PR from release/<image> to main.
-    # Includes context-aware title, body, and reviewer assignment.
-    # Used for integrating verified releases into mainline.
-    # ==========================================================
-    - name: 🔄 Create Pull Request to main
-      if: success()
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.pat }}
-      run: |
+      if: always()
+    - run: |
         RELEASE_BRANCH="${{ steps.branch.outputs.branch }}"
         TITLE="🚀 Merge ${RELEASE_BRANCH} → main"
         BODY=$(cat <<EOF
@@ -219,3 +150,7 @@ runs:
           --body "$BODY"
           --base main \
           --head "$RELEASE_BRANCH" || echo "ℹ️ Pull Request already exists."
+      env:
+        GH_TOKEN: ${{ inputs.pat }}
+      if: success()
+      shell: bash

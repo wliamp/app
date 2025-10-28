@@ -5,9 +5,9 @@ COPY gradle ./gradle
 COPY build.gradle settings.gradle ./
 RUN ./gradlew dependencies --no-daemon || true
 ARG SCOPE
-ARG MODULE
-COPY ${SCOPE}/${MODULE}/src ./src
-RUN ./gradlew :${SCOPE}:${MODULE}:bootJar --no-daemon
+ARG SERVICE
+COPY ${SCOPE}/${SERVICE}/src ./src
+RUN ./gradlew :${SCOPE}:${SERVICE}:bootJar --no-daemon
 FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 COPY --from=builder /app/build/libs/*.jar app.jar

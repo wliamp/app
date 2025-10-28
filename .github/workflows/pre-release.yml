@@ -1,38 +1,28 @@
-name: Before Release
-
+name: Prepare Release
 on:
   schedule:
-    - cron: "0 0 * * 1" # 0h UTC Monday Weekly
-
+    - cron: "0 0 * * 1"
 jobs:
   resolve-version:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.resolve.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: dev
           sparse-checkout: settings.gradle
-
-      - id: resolve
+      - run: bash .shell/pre-release
         env:
           DOCKERHUB_USER: ${{ vars.DOCKERHUB_USER }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
-        run: bash .shell/pre-release
-
-  pre-release:
-    needs: resolve-version
+        id: resolve
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
+  pre-release:
     steps:
       - uses: actions/checkout@v4
         with:
           ref: dev
-
       - uses: ./.github/actions/pre-release
         with:
           scope: ${{ matrix.scope }}
@@ -40,3 +30,8 @@ jobs:
           version: ${{ matrix.version }}
           key: ${{ secrets.JAVA_DK }}
           pat: ${ secrets.JAVA_PAT }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve-version.outputs.matrix) }}
+    needs: resolve-version
+    runs-on: ubuntu-latest

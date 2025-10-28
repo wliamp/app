@@ -1,32 +1,27 @@
 name: Release
-
 on:
   pull_request:
     branches: [ main ]
-
 jobs:
   release:
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - id: parse
-        run: bash .shell/release
-
+      - run: bash .shell/release
+        id: parse
       - uses: ./.github/actions/release
         with:
           scope: ${{ steps.parse.outputs.scope }}
           service: ${{ steps.parse.outputs.service }}
           version: ${{ steps.parse.outputs.version }}
-
           docker_user: ${{ vars.DOCKERHUB_USER }}
           docker_repo: ${{ vars.DOCKERHUB_REPO }}
-
           docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
           slack: ${{ secrets.SLACK_WEBHOOK_URL }}
           telegram_token: ${{ secrets.TELEGRAM_TOKEN }}
           telegram: ${{ secrets.TELEGRAM_CHAT_ID }}
           discord: ${{ secrets.DISCORD_WEBHOOK_URL }}
           pat: ${{ secrets.JAVA_DEPLOYMENT_PAT }}
+    environment: release
+    runs-on: ubuntu-latest
