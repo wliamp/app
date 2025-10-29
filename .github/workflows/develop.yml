@@ -24,7 +24,7 @@ jobs:
             */build.gradle
             gradle/
             gradlew
-      - uses: ./.github/actions/develop
+      - uses: wliamp/action/.github/actions/develop@main
         with:
           scope: ${{ matrix.scope }}
           service: ${{ matrix.service }}

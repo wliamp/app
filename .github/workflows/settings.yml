@@ -14,7 +14,7 @@ jobs:
       - run: bash .shell/settings
         env:
           DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO }}
-      - uses: ./.github/actions/settings
+      - uses: wliamp/action/.github/actions/settings@main
         with:
           in_key: ${{ secrets.JAVA_DK }}
           ex_key: ${{ secrets.JAVA_DEPLOYMENT_DK }}

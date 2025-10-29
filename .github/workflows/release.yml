@@ -10,7 +10,7 @@ jobs:
           fetch-depth: 1
       - run: bash .shell/release
         id: parse
-      - uses: ./.github/actions/release
+      - uses: wliamp/action/.github/actions/release@main
         with:
           scope: ${{ steps.parse.outputs.scope }}
           service: ${{ steps.parse.outputs.service }}
